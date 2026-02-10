@@ -3,6 +3,7 @@
 //  leap
 //
 //  SwiftData models + challenge data and app state
+//  "Travel agency for life" - goals as flights, challenges as itinerary steps
 //
 
 import Foundation
@@ -15,23 +16,74 @@ final class Goal {
     @Attribute(.unique) var id: UUID
     var title: String
     var goalDescription: String
-    var category: String
+    var category: String // GoalCategory rawValue
     var createdAt: Date
-    var targetDaysPerWeek: Int // 1-7
+
+    // Travel agency framing
+    var destination: String // The specific goal (e.g., "Iceland", "Senior PM", "$100K")
+    var timeline: String // When (e.g., "June 2026")
+    var userStory: String // Why it matters to them
+    var boardingPass: String // AI-generated encouragement message
+
+    // Progress tracking
     var currentStreak: Int
     var longestStreak: Int
+    var lastActionDate: Date?
+
+    // Challenges (sequential unlocking)
     @Relationship(inverse: \DailyTask.goal) var dailyTasks: [DailyTask] = []
+
+    // Legacy support
+    var targetDaysPerWeek: Int
     var isPremiumFeature: Bool = false
 
-    init(id: UUID = UUID(), title: String, goalDescription: String, category: String, createdAt: Date = .now, targetDaysPerWeek: Int, currentStreak: Int = 0, longestStreak: Int = 0, isPremiumFeature: Bool = false) {
+    // Computed progress
+    var progress: Double {
+        guard !dailyTasks.isEmpty else { return 0 }
+        let completed = dailyTasks.filter { $0.isCompleted }.count
+        return Double(completed) / Double(dailyTasks.count) * 100
+    }
+
+    var isComplete: Bool {
+        progress >= 100
+    }
+
+    // Current challenge (first unlocked, uncompleted)
+    var currentChallenge: DailyTask? {
+        dailyTasks
+            .sorted { $0.order < $1.order }
+            .first { $0.isUnlocked && !$0.isCompleted }
+    }
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        goalDescription: String,
+        category: String,
+        destination: String = "",
+        timeline: String = "",
+        userStory: String = "",
+        boardingPass: String = "",
+        createdAt: Date = .now,
+        targetDaysPerWeek: Int = 7,
+        currentStreak: Int = 0,
+        longestStreak: Int = 0,
+        lastActionDate: Date? = nil,
+        isPremiumFeature: Bool = false
+    ) {
         self.id = id
         self.title = title
         self.goalDescription = goalDescription
         self.category = category
+        self.destination = destination
+        self.timeline = timeline
+        self.userStory = userStory
+        self.boardingPass = boardingPass
         self.createdAt = createdAt
         self.targetDaysPerWeek = targetDaysPerWeek
         self.currentStreak = currentStreak
         self.longestStreak = longestStreak
+        self.lastActionDate = lastActionDate
         self.isPremiumFeature = isPremiumFeature
     }
 }
@@ -42,19 +94,43 @@ final class DailyTask {
     var goalID: String
     var title: String
     var taskDescription: String
+    var estimatedTime: String // e.g., "5 min", "15 min"
     var completedDates: [Date]
     var createdAt: Date
-    var order: Int
+    var order: Int // 0-6 for sequential unlocking
+    var isUnlocked: Bool // Sequential unlocking
     var goal: Goal?
 
-    init(id: UUID = UUID(), goalID: String, title: String, taskDescription: String, completedDates: [Date] = [], createdAt: Date = .now, order: Int, goal: Goal? = nil) {
+    // Computed properties
+    var isCompleted: Bool {
+        !completedDates.isEmpty
+    }
+
+    var completedAt: Date? {
+        completedDates.first
+    }
+
+    init(
+        id: UUID = UUID(),
+        goalID: String,
+        title: String,
+        taskDescription: String,
+        estimatedTime: String = "",
+        completedDates: [Date] = [],
+        createdAt: Date = .now,
+        order: Int,
+        isUnlocked: Bool = false,
+        goal: Goal? = nil
+    ) {
         self.id = id
         self.goalID = goalID
         self.title = title
         self.taskDescription = taskDescription
+        self.estimatedTime = estimatedTime
         self.completedDates = completedDates
         self.createdAt = createdAt
         self.order = order
+        self.isUnlocked = isUnlocked
         self.goal = goal
     }
 }
@@ -78,28 +154,204 @@ final class Streak {
     }
 }
 
+// MARK: - Microhabit (supports grander vision, optional focus timer)
 @Model
-final class PremiumChallenge {
+final class Microhabit {
     @Attribute(.unique) var id: UUID
     var title: String
-    var challengeDescription: String
-    var durationDays: Int // 3, 7, 14, 30
-    var category: String
-    var isFree: Bool
-    var tasks: [String]
+    var habitDescription: String // e.g. "I will ... so that I can become..."
+    var goalID: String? // optional link to Goal (grander vision)
+    var focusDurationMinutes: Int // 0 = no timer
+    var typeRaw: String // "create" | "replace"
+    var completedDates: [Date]
+    var createdAt: Date
 
-    init(id: UUID = UUID(), title: String, challengeDescription: String, durationDays: Int, category: String, isFree: Bool, tasks: [String]) {
+    @Transient
+    var type: MicrohabitType {
+        MicrohabitType(rawValue: typeRaw) ?? .create
+    }
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        habitDescription: String = "",
+        goalID: String? = nil,
+        focusDurationMinutes: Int = 5,
+        type: MicrohabitType = .create,
+        completedDates: [Date] = [],
+        createdAt: Date = .now
+    ) {
         self.id = id
         self.title = title
-        self.challengeDescription = challengeDescription
-        self.durationDays = durationDays
-        self.category = category
-        self.isFree = isFree
-        self.tasks = tasks
+        self.habitDescription = habitDescription
+        self.goalID = goalID
+        self.focusDurationMinutes = focusDurationMinutes
+        self.typeRaw = type.rawValue
+        self.completedDates = completedDates
+        self.createdAt = createdAt
+    }
+
+    @Transient
+    var hasFocusTimer: Bool { focusDurationMinutes > 0 }
+}
+
+enum MicrohabitType: String, CaseIterable {
+    case create = "create"
+    case replace = "replace"
+
+    var displayName: String {
+        switch self {
+        case .create: return "Create a habit"
+        case .replace: return "Replace a bad habit"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .create: return "Start a new habit that will have remarkable results."
+        case .replace: return "Redirect the time and energy towards a good habit instead."
+        }
     }
 }
 
-// MARK: - Challenge (micro-challenges for Today / Categories)
+// MARK: - User Profile (stored in UserDefaults)
+struct UserProfile: Codable {
+    var name: String
+    var gender: Gender
+    var hasSubscription: Bool
+    var subscriptionType: SubscriptionType?
+    var freeGoalsRemaining: Int // For annual plan (starts at 3)
+    var streak: Int
+    var lastActionDate: Date?
+    var onboardingCompleted: Bool
+    var createdAt: Date
+
+    enum Gender: String, Codable {
+        case woman, man, nonBinary = "non-binary"
+    }
+
+    enum SubscriptionType: String, Codable {
+        case annual, monthly
+    }
+
+    static var `default`: UserProfile {
+        UserProfile(
+            name: "",
+            gender: .woman,
+            hasSubscription: false,
+            subscriptionType: nil,
+            freeGoalsRemaining: 3,
+            streak: 0,
+            lastActionDate: nil,
+            onboardingCompleted: false,
+            createdAt: .now
+        )
+    }
+}
+
+// MARK: - Storage Keys
+enum StorageKey {
+    static let hasSeenOnboarding = "noor_has_seen_onboarding"
+    static let hasCompletedOnboarding = "hasCompletedOnboarding"
+    static let userProfile = "noor_user_profile"
+    static let completedChallengeIds = "noor_completed_ids"
+    static let lastCompletionDate = "noor_last_completion_date"
+    static let streakCount = "noor_streak"
+    static let freeGoalsRemaining = "noor_free_goals"
+    static let firstGoalData = "noor_first_goal"
+    static let visionBoards = "noor_vision_boards"
+    static let visionItems = "noor_vision_items"
+    static let guestPassCount = "noor_guest_pass_count"
+}
+
+// MARK: - Vision item: inspiration + action (Pinterest, destination, or link); can link to a journey
+struct VisionItem: Codable, Identifiable {
+    var id: UUID
+    var kindRaw: String // "pinterest" | "destination" | "action" | "instagram"
+    var title: String
+    var url: String?
+    var placeName: String? // for destination
+    var goalID: String?   // link to a journey/dream
+    var completedAt: Date? // accountability: marked done
+
+    var kind: VisionItemKind {
+        get { VisionItemKind(rawValue: kindRaw) ?? .pinterest }
+        set { kindRaw = newValue.rawValue }
+    }
+
+    var isCompleted: Bool { completedAt != nil }
+
+    init(id: UUID = UUID(), kind: VisionItemKind, title: String, url: String? = nil, placeName: String? = nil, goalID: String? = nil, completedAt: Date? = nil) {
+        self.id = id
+        self.kindRaw = kind.rawValue
+        self.title = title
+        self.url = url
+        self.placeName = placeName
+        self.goalID = goalID
+        self.completedAt = completedAt
+    }
+}
+
+// Suggested actions for "choose your own" to get ideas going
+enum VisionActionSuggestion: String, CaseIterable {
+    case messageSomeone = "Message someone"
+    case updateLinkedIn = "Update LinkedIn"
+    case bookFlight = "Book a flight"
+    case researchCourse = "Research a course"
+    case scheduleCall = "Schedule a call"
+    case sendEmail = "Send an email"
+    case buySomething = "Buy something I need"
+    case applyToJob = "Apply to a job"
+    case other = "Other (custom)"
+
+    var urlPlaceholder: String? {
+        switch self {
+        case .updateLinkedIn: return "https://linkedin.com"
+        case .other, .messageSomeone, .bookFlight, .researchCourse, .scheduleCall, .sendEmail, .buySomething, .applyToJob: return nil
+        }
+    }
+}
+
+enum VisionItemKind: String, CaseIterable {
+    case pinterest = "pinterest"
+    case instagram = "instagram"
+    case destination = "destination"
+    case action = "action"
+
+    var displayName: String {
+        switch self {
+        case .pinterest: return "Pinterest board"
+        case .instagram: return "Instagram post or profile"
+        case .destination: return "Place to travel"
+        case .action: return "Action / link"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .pinterest: return "photo.on.rectangle.angled"
+        case .instagram: return "camera.fill"
+        case .destination: return "globe.americas.fill"
+        case .action: return "bolt.fill"
+        }
+    }
+}
+
+// Legacy: keep for migration if needed
+struct VisionBoardItem: Codable, Identifiable {
+    var id: UUID
+    var title: String
+    var url: String
+
+    init(id: UUID = UUID(), title: String, url: String) {
+        self.id = id
+        self.title = title
+        self.url = url
+    }
+}
+
+// MARK: - Legacy Challenge Types (for backward compatibility)
+
 struct Challenge: Identifiable {
     let id: String
     let title: String
@@ -110,7 +362,6 @@ struct Challenge: Identifiable {
     var durationText: String { "\(durationMinutes) min" }
 }
 
-// MARK: - Category
 enum ChallengeCategory: String, CaseIterable, Identifiable {
     typealias Id = String
     case career = "Career Growth"
@@ -143,15 +394,6 @@ enum ChallengeCategory: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - All challenges (flat for "today's challenge" pick)
 var allChallenges: [Challenge] {
     ChallengeCategory.allCases.flatMap { $0.challenges }
-}
-
-// MARK: - Completion & Streak (UserDefaults keys)
-enum StorageKey {
-    static let hasSeenOnboarding = "noor_has_seen_onboarding"
-    static let completedChallengeIds = "noor_completed_ids"
-    static let lastCompletionDate = "noor_last_completion_date"
-    static let streakCount = "noor_streak"
 }

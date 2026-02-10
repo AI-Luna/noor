@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  leap
 //
-//  App shell: onboarding gate then TabView (Home, Goals, Profile)
+//  App shell: cinematic onboarding gate then TabView (Home, Goals, Profile)
 //
 
 import SwiftUI
@@ -12,41 +12,106 @@ struct ContentView: View {
     @Environment(DataManager.self) private var dataManager
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
     @State private var showPurchaseErrorAlert = false
+    @State private var hasCreatedFirstGoal = false
 
     var body: some View {
-        if !hasCompletedOnboarding {
-            WelcomeView(onFinish: {
-                hasCompletedOnboarding = true
-            })
-        } else {
-            TabView {
-                DashboardView()
-                    .tabItem {
-                        Label("Home", systemImage: "house.fill")
-                    }
-                GoalsListView()
-                    .tabItem {
-                        Label("Goals", systemImage: "target")
-                    }
-                ProfileView()
-                    .tabItem {
-                        Label("Profile", systemImage: "person.fill")
-                    }
-            }
-            .tint(Color.noorPink)
-            .onChange(of: purchaseManager.errorMessage) { _, newValue in
-                showPurchaseErrorAlert = (newValue != nil && !(newValue?.isEmpty ?? true))
-            }
-            .alert("Error", isPresented: $showPurchaseErrorAlert) {
-                Button("OK") {
-                    showPurchaseErrorAlert = false
-                    purchaseManager.errorMessage = nil
+        ZStack {
+            if !hasCompletedOnboarding {
+                OnboardingView(onComplete: {
+                    hasCompletedOnboarding = true
+                    createFirstGoalFromOnboarding()
+                })
+            } else {
+                TabView {
+                    DashboardView()
+                        .tabItem {
+                            Label("Home", systemImage: "house.fill")
+                        }
+                    ProgressTabView()
+                        .tabItem {
+                            Label("Progress", systemImage: "chart.line.uptrend.xyaxis")
+                        }
+                    VisionView()
+                        .tabItem {
+                            Label("Vision", systemImage: "photo.on.rectangle.angled")
+                        }
+                    MicrohabitsView()
+                        .tabItem {
+                            Label("Habits", systemImage: "leaf.fill")
+                        }
                 }
-            } message: {
-                if let msg = purchaseManager.errorMessage {
-                    Text(msg)
+                .tint(Color.noorAccent)
+                .onChange(of: purchaseManager.errorMessage) { _, newValue in
+                    showPurchaseErrorAlert = (newValue != nil && !(newValue?.isEmpty ?? true))
+                }
+                .alert("Error", isPresented: $showPurchaseErrorAlert) {
+                    Button("OK") {
+                        showPurchaseErrorAlert = false
+                        purchaseManager.errorMessage = nil
+                    }
+                } message: {
+                    if let msg = purchaseManager.errorMessage {
+                        Text(msg)
+                    }
                 }
             }
         }
+        .preferredColorScheme(.dark)
+    }
+
+    private func createFirstGoalFromOnboarding() {
+        guard !hasCreatedFirstGoal else { return }
+        hasCreatedFirstGoal = true
+
+        // Retrieve first goal data from onboarding
+        guard let data = UserDefaults.standard.data(forKey: StorageKey.firstGoalData),
+              let goalData = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return
+        }
+
+        let category = goalData["category"] as? String ?? "travel"
+        let destination = goalData["destination"] as? String ?? ""
+        let timeline = goalData["timeline"] as? String ?? ""
+        let userStory = goalData["userStory"] as? String ?? ""
+        let boardingPass = goalData["boardingPass"] as? String ?? ""
+        let challengesData = goalData["challenges"] as? [[String: Any]] ?? []
+
+        // Create goal
+        let goal = Goal(
+            title: destination.isEmpty ? "My First Journey" : destination,
+            goalDescription: userStory,
+            category: category,
+            destination: destination,
+            timeline: timeline,
+            userStory: userStory,
+            boardingPass: boardingPass,
+            targetDaysPerWeek: 7
+        )
+
+        // Create tasks from challenges
+        for (index, challengeData) in challengesData.enumerated() {
+            let task = DailyTask(
+                goalID: goal.id.uuidString,
+                title: challengeData["title"] as? String ?? "Challenge \(index + 1)",
+                taskDescription: challengeData["description"] as? String ?? "",
+                estimatedTime: challengeData["estimatedTime"] as? String ?? "10 min",
+                order: index,
+                isUnlocked: index == 0, // Only first task unlocked
+                goal: goal
+            )
+            goal.dailyTasks.append(task)
+        }
+
+        // Save goal
+        Task {
+            do {
+                try await dataManager.saveGoal(goal)
+            } catch {
+                print("Failed to save first goal: \(error)")
+            }
+        }
+
+        // Clean up stored data
+        UserDefaults.standard.removeObject(forKey: StorageKey.firstGoalData)
     }
 }

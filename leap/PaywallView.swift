@@ -28,15 +28,8 @@ struct PaywallView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.58, green: 0.2, blue: 0.8),
-                        Color(red: 0.2, green: 0.4, blue: 0.9)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                Color.noorBackground
+                    .ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: 24) {
@@ -93,45 +86,54 @@ struct PaywallView: View {
 
     // MARK: - Header
     private var headerSection: some View {
-        Text("Unlock unlimited goals & features")
-            .font(.system(size: 26, weight: .bold))
-            .foregroundStyle(.white)
-            .multilineTextAlignment(.center)
-            .padding(.top, 8)
+        VStack(spacing: 12) {
+            Image(systemName: "airplane.departure")
+                .font(.system(size: 48))
+                .foregroundStyle(Color.noorRoseGold)
+
+            Text("Your ticket is ready.")
+                .font(NoorFont.hero)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+
+            Rectangle()
+                .fill(Color.noorRoseGold.opacity(0.5))
+                .frame(width: 60, height: 1)
+        }
+        .padding(.top, 8)
     }
 
     // MARK: - Hero
     private var heroSection: some View {
         VStack(spacing: 12) {
-            Image(systemName: "star.circle.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(.white.opacity(0.9))
-            Text("Build habits that stick.")
+            Text("Unlock unlimited flights.")
                 .font(NoorFont.title2)
-                .foregroundStyle(.white.opacity(0.95))
+                .foregroundStyle(Color.noorTextSecondary)
             if let message = proGateMessage {
                 Text(message)
-                    .font(NoorFont.callout)
-                    .foregroundStyle(.white.opacity(0.9))
+                    .font(NoorFont.body)
+                    .foregroundStyle(Color.noorRoseGold)
                     .multilineTextAlignment(.center)
                     .padding(.top, 4)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 28)
+        .padding(.vertical, 20)
     }
 
     // MARK: - Pricing cards
     private var pricingSection: some View {
         VStack(spacing: 16) {
-            if let monthly = monthlyPackage {
-                MonthlyPlanCard(package: monthly) {
-                    purchase(monthly)
-                }
-            }
+            // Annual (highlighted) first
             if let yearly = yearlyPackage {
                 YearlyPlanCard(package: yearly) {
                     purchase(yearly)
+                }
+            }
+            // Monthly second
+            if let monthly = monthlyPackage {
+                MonthlyPlanCard(package: monthly) {
+                    purchase(monthly)
                 }
             }
             if monthlyPackage == nil && yearlyPackage == nil {
@@ -154,15 +156,21 @@ struct PaywallView: View {
             }
 
             Text("Auto-renews. Cancel anytime in Settings.")
-                .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.75))
+                .font(NoorFont.caption)
+                .foregroundStyle(Color.noorTextSecondary.opacity(0.7))
 
             Button(action: restore) {
                 Text("Restore Purchases")
                     .font(NoorFont.callout)
-                    .foregroundStyle(.white.opacity(0.95))
+                    .foregroundStyle(Color.noorTextSecondary)
             }
             .buttonStyle(.plain)
+
+            Text("The woman who lives that life invests in herself.")
+                .font(NoorFont.caption)
+                .foregroundStyle(Color.noorTextSecondary.opacity(0.5))
+                .italic()
+                .padding(.top, 8)
         }
         .padding(.top, 8)
     }
@@ -199,38 +207,53 @@ struct PaywallView: View {
     }
 }
 
-// MARK: - Monthly plan card
-private struct MonthlyPlanCard: View {
+// MARK: - Annual plan card (highlighted)
+private struct YearlyPlanCard: View {
     let package: Package
     let action: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(package.localizedPriceString)
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(Color.noorCharcoal)
-                    Text("Billed monthly")
-                        .font(NoorFont.caption)
-                        .foregroundStyle(Color.noorCharcoal.opacity(0.7))
-                }
+                Text("Annual Pass")
+                    .font(NoorFont.title)
+                    .foregroundStyle(Color.noorCharcoal)
+
                 Spacer()
+
+                Text("BEST VALUE")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.noorSuccess)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(package.localizedPriceString + "/year")
+                    .font(NoorFont.largeTitle)
+                    .foregroundStyle(Color.noorCharcoal)
+
+                Text("Only $3.33/month")
+                    .font(NoorFont.caption)
+                    .foregroundStyle(Color.noorSuccess)
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                paywallFeatureRow("Unlimited goals")
-                paywallFeatureRow("Daily challenges")
-                paywallFeatureRow("Analytics")
+                paywallFeatureRow("Board 3 flights immediately")
+                paywallFeatureRow("Unlimited destinations after")
+                paywallFeatureRow("Daily itinerary updates")
+                paywallFeatureRow("Progress tracking & proof")
             }
 
             Button(action: action) {
-                Text("Subscribe Monthly")
-                    .font(NoorFont.title2)
+                Text("Purchase Annual Pass")
+                    .font(NoorFont.button)
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
-                    .background(Color(red: 0.2, green: 0.4, blue: 0.9))
+                    .background(Color.noorAccent)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
             }
             .buttonStyle(.plain)
@@ -238,60 +261,48 @@ private struct MonthlyPlanCard: View {
         .padding(20)
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 20))
-        .shadow(color: .black.opacity(0.1), radius: 12, x: 0, y: 4)
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(Color.noorRoseGold, lineWidth: 2)
+        )
     }
 }
 
-// MARK: - Yearly plan card (recommended)
-private struct YearlyPlanCard: View {
+// MARK: - Monthly plan card
+private struct MonthlyPlanCard: View {
     let package: Package
     let action: () -> Void
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(package.localizedPriceString)
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(Color.noorCharcoal)
-                        Text("Save 58%")
-                            .font(NoorFont.caption)
-                            .foregroundStyle(Color.noorTeal)
-                    }
-                    Spacer()
-                }
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Monthly Pass")
+                .font(NoorFont.title)
+                .foregroundStyle(Color.noorCharcoal)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    paywallFeatureRow("Everything in Monthly")
-                    paywallFeatureRow("Priority support")
-                }
+            Text(package.localizedPriceString + "/month")
+                .font(NoorFont.title2)
+                .foregroundStyle(Color.noorCharcoal)
 
-                Button(action: action) {
-                    Text("Get Yearly Plan")
-                        .font(NoorFont.title2)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(Color.noorPink)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                }
-                .buttonStyle(.plain)
+            paywallFeatureRow("Unlimited flights immediately")
+
+            Button(action: action) {
+                Text("Purchase Monthly Pass")
+                    .font(NoorFont.button)
+                    .foregroundStyle(Color.noorViolet)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.noorViolet, lineWidth: 2)
+                    )
             }
-            .padding(20)
-            .background(Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 20))
-            .shadow(color: .black.opacity(0.1), radius: 12, x: 0, y: 4)
-
-            Text("5 DAYS FREE")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color(hex: "27AE60"))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .padding(12)
+            .buttonStyle(.plain)
         }
+        .padding(20)
+        .background(Color.white.opacity(0.95))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 }
 
@@ -299,7 +310,7 @@ private func paywallFeatureRow(_ text: String) -> some View {
     HStack(alignment: .center, spacing: 10) {
         Image(systemName: "checkmark.circle.fill")
             .font(.system(size: 16))
-            .foregroundStyle(Color.noorTeal)
+            .foregroundStyle(Color.noorSuccess)
         Text(text)
             .font(NoorFont.body)
             .foregroundStyle(Color.noorCharcoal)

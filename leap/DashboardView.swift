@@ -2,7 +2,8 @@
 //  DashboardView.swift
 //  leap
 //
-//  Main daily view: greeting, today's goal cards, tasks, streak, CTA
+//  Main dashboard: greeting, active journeys, today's challenges
+//  "Travel agency for life" - luxury magazine aesthetic
 //
 
 import SwiftUI
@@ -16,17 +17,40 @@ struct DashboardView: View {
     @State private var errorMessage: String?
     @State private var showCreateGoal = false
     @State private var showPaywall = false
+    @State private var showProfile = false
+    @State private var showStreakSheet = false
+    @State private var showGoldenTicketSheet = false
+    @State private var globalStreak: Int = 0
+    @State private var visionItems: [VisionItem] = []
     private let calendar = Calendar.current
-    private let userName = "Seeker" // placeholder; could come from UserDefaults
+
+    private var guestPassCount: Int {
+        let c = UserDefaults.standard.integer(forKey: StorageKey.guestPassCount)
+        return c > 0 ? c : 5
+    }
+
+    private var userName: String {
+        UserDefaults.standard.string(forKey: "userName") ?? "Traveler"
+    }
 
     private var canCreateNewGoal: Bool {
         purchaseManager.isPro || goals.count < 1
     }
 
+    private var greeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 0..<12: return "Good morning"
+        case 12..<17: return "Good afternoon"
+        default: return "Good evening"
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
-                LinearGradient.noorPurpleBlue
+                // Background
+                Color.noorBackground
                     .ignoresSafeArea()
 
                 if isLoading {
@@ -37,35 +61,38 @@ struct DashboardView: View {
                     VStack(spacing: 12) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.title)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.noorOrange)
                         Text(msg)
                             .font(NoorFont.body)
-                            .foregroundStyle(.white.opacity(0.9))
+                            .foregroundStyle(Color.noorTextSecondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
                     }
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 24) {
+                        VStack(alignment: .leading, spacing: 28) {
                             greetingSection
+                            streakSection
+                            fromYourVisionSection
                             if goals.isEmpty {
                                 emptyState
                             } else {
-                                goalCardsSection
+                                activeJourneysSection
                             }
-                            ctaSection
                         }
                         .padding(20)
-                        .padding(.bottom, 80)
+                        .padding(.bottom, 100)
                     }
                 }
 
-                // Floating action button: create goal or show paywall if at limit
+                // Floating action button
                 VStack {
                     Spacer()
                     HStack {
                         Spacer()
                         Button {
+                            let generator = UIImpactFeedbackGenerator(style: .medium)
+                            generator.impactOccurred()
                             if canCreateNewGoal {
                                 showCreateGoal = true
                             } else {
@@ -75,10 +102,16 @@ struct DashboardView: View {
                             Image(systemName: "plus")
                                 .font(.system(size: 24, weight: .semibold))
                                 .foregroundStyle(.white)
-                                .frame(width: 56, height: 56)
-                                .background(Color.noorPink)
+                                .frame(width: 60, height: 60)
+                                .background(
+                                    LinearGradient(
+                                        colors: [Color.noorAccent, Color.noorViolet],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
                                 .clipShape(Circle())
-                                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                                .shadow(color: Color.noorAccent.opacity(0.4), radius: 12, x: 0, y: 6)
                         }
                         .buttonStyle(.plain)
                         .padding(.trailing, 20)
@@ -87,143 +120,258 @@ struct DashboardView: View {
                 }
                 .allowsHitTesting(!isLoading && errorMessage == nil)
             }
-            .navigationTitle("Dashboard")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        if canCreateNewGoal {
-                            showCreateGoal = true
-                        } else {
-                            showPaywall = true
-                        }
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkle")
+                            .foregroundStyle(Color.noorRoseGold)
+                        Text("Noor")
+                            .font(.system(size: 20, weight: .bold, design: .serif))
+                            .foregroundStyle(.white)
                     }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 16) {
+                        Button {
+                            showStreakSheet = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "flame.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(Color.noorOrange)
+                                Text("\(globalStreak)")
+                                    .font(NoorFont.callout)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.12))
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            showGoldenTicketSheet = true
+                        } label: {
+                            Image("GoldenTicket")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            showProfile = true
+                        } label: {
+                            Image(systemName: "person.circle")
+                                .font(.system(size: 22))
+                                .foregroundStyle(Color.noorTextSecondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .sheet(isPresented: $showStreakSheet) {
+                StreakCalendarSheet(streakCount: globalStreak, onDismiss: { showStreakSheet = false })
+            }
+            .sheet(isPresented: $showGoldenTicketSheet) {
+                GoldenTicketSheet(
+                    guestPassCount: guestPassCount,
+                    onDismiss: { showGoldenTicketSheet = false },
+                    onGift: {
+                        showGoldenTicketSheet = false
+                        let count = UserDefaults.standard.integer(forKey: StorageKey.guestPassCount)
+                        let current = count > 0 ? count : 5
+                        if current > 0 {
+                            UserDefaults.standard.set(current - 1, forKey: StorageKey.guestPassCount)
+                        }
+                    }
+                )
+            }
+            .sheet(isPresented: $showProfile) {
+                NavigationStack {
+                    ProfileView()
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Done") { showProfile = false }
+                                    .foregroundStyle(Color.noorTextSecondary)
+                            }
+                        }
+                }
+                .environment(dataManager)
+                .environment(purchaseManager)
             }
             .onAppear {
                 DataManager.shared.initialize()
                 loadGoals()
+                loadGlobalStreak()
+                loadVisionItems()
             }
-            .refreshable { loadGoals() }
+            .refreshable {
+                loadGoals()
+                loadGlobalStreak()
+                loadVisionItems()
+            }
             .sheet(isPresented: $showCreateGoal, onDismiss: { loadGoals() }) {
                 CreateGoalView()
             }
             .sheet(isPresented: $showPaywall) {
                 PaywallView(
                     onDismiss: { showPaywall = false },
-                    proGateMessage: "Pro members can create unlimited goals"
+                    proGateMessage: "Unlock unlimited flights with Pro"
                 )
             }
         }
     }
 
-    // MARK: - Greeting
+    // MARK: - Greeting Section
     private var greetingSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Good morning, \(userName)!")
+        VStack(alignment: .leading, spacing: 8) {
+            Text("\(greeting), \(userName)!")
                 .font(NoorFont.largeTitle)
                 .foregroundStyle(.white)
+
             Text(formattedDate)
                 .font(NoorFont.caption)
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(Color.noorTextSecondary)
         }
     }
 
     private var formattedDate: String {
         let formatter = DateFormatter()
-        formatter.dateStyle = .full
+        formatter.dateFormat = "EEEE, MMMM d, yyyy"
         return formatter.string(from: Date())
     }
 
-    // MARK: - Empty state
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "target")
-                .font(.system(size: 48))
-                .foregroundStyle(.white.opacity(0.7))
-            Text("Create your first goal to get started")
-                .font(NoorFont.title2)
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.center)
+    // MARK: - Streak Section
+    private var streakSection: some View {
+        HStack(spacing: 16) {
+            // Streak display
+            HStack(spacing: 8) {
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color.noorOrange, Color.noorAccent],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(globalStreak) day streak")
+                        .font(NoorFont.title2)
+                        .foregroundStyle(.white)
+
+                    Text(globalStreak > 0 ? "Keep it going!" : "Start your streak today")
+                        .font(NoorFont.caption)
+                        .foregroundStyle(Color.noorTextSecondary)
+                }
+            }
+
+            Spacer()
+
+            // Active journeys count
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(goals.count)")
+                    .font(NoorFont.title)
+                    .foregroundStyle(Color.noorRoseGold)
+
+                Text("Active \(goals.count == 1 ? "flight" : "flights")")
+                    .font(NoorFont.caption)
+                    .foregroundStyle(Color.noorTextSecondary)
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
+        .padding(20)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 
-    // MARK: - Goal cards
-    private var goalCardsSection: some View {
+    // MARK: - From your vision (today's one thing to act on)
+    private var fromYourVisionSection: some View {
+        FromYourVisionBlock(items: visionItems, onOpen: openVisionItem)
+    }
+
+    private func loadVisionItems() {
+        guard let data = UserDefaults.standard.data(forKey: StorageKey.visionItems),
+              let decoded = try? JSONDecoder().decode([VisionItem].self, from: data) else {
+            visionItems = []
+            return
+        }
+        visionItems = decoded
+    }
+
+    private func openVisionItem(_ item: VisionItem) {
+        switch item.kind {
+        case .pinterest, .instagram, .action:
+            if let urlString = item.url, let url = URL(string: urlString) {
+                UIApplication.shared.open(url)
+            }
+        case .destination:
+            let name = item.placeName ?? item.title
+            let query = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+            if let url = URL(string: "https://www.google.com/search?q=flights+to+\(query)") {
+                UIApplication.shared.open(url)
+            }
+        }
+    }
+
+    // MARK: - Empty State
+    private var emptyState: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "airplane.departure")
+                .font(.system(size: 56))
+                .foregroundStyle(Color.noorRoseGold.opacity(0.7))
+
+            VStack(spacing: 8) {
+                Text("Book your first flight")
+                    .font(NoorFont.title)
+                    .foregroundStyle(.white)
+
+                Text("Your journey to the woman who lives that life starts with one small step.")
+                    .font(NoorFont.body)
+                    .foregroundStyle(Color.noorTextSecondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button {
+                showCreateGoal = true
+            } label: {
+                Text("Book Your First Flight")
+                    .font(NoorFont.button)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(Color.noorAccent)
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 8)
+        }
+        .padding(24)
+        .background(Color.white.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+    }
+
+    // MARK: - Active Journeys
+    private var activeJourneysSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Today's goals")
-                .font(NoorFont.title2)
+            Text("Your Dreams")
+                .font(NoorFont.title)
                 .foregroundStyle(.white)
 
             ForEach(goals, id: \.id) { goal in
-                GoalCardView(
-                    goal: goal,
-                    todayTasks: sortedTasks(for: goal),
-                    onToggleTask: { task in toggleTask(task, goal: goal) }
-                )
-            }
-        }
-    }
-
-    private func sortedTasks(for goal: Goal) -> [DailyTask] {
-        goal.dailyTasks.sorted { $0.order < $1.order }
-    }
-
-    private func isCompletedToday(_ task: DailyTask) -> Bool {
-        let today = calendar.startOfDay(for: Date())
-        return task.completedDates.contains { calendar.isDate($0, inSameDayAs: today) }
-    }
-
-    private func toggleTask(_ task: DailyTask, goal: Goal) {
-        let goalID = goal.id.uuidString
-        let taskID = task.id.uuidString
-        let completed = isCompletedToday(task)
-        Task { @MainActor in
-            do {
-                if completed {
-                    try await dataManager.removeDailyTaskCompletion(goalID: goalID, taskID: taskID, date: Date())
-                } else {
-                    try await dataManager.addDailyTaskCompletion(goalID: goalID, taskID: taskID, date: Date())
-                }
-                loadGoals()
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    // MARK: - CTA
-    private var ctaSection: some View {
-        VStack(spacing: 12) {
-            if goals.isEmpty {
-                Button { showCreateGoal = true } label: {
-                    ctaButton(title: "Create New Goal")
+                NavigationLink(destination: DailyCheckInView(goal: goal)) {
+                    JourneyCard(goal: goal)
                 }
                 .buttonStyle(.plain)
-            } else {
-                NavigationLink(destination: AllGoalsPlaceholderView()) {
-                    ctaButton(title: "View All Goals")
-                }
             }
         }
-        .padding(.top, 8)
     }
 
-    private func ctaButton(title: String) -> some View {
-        Text(title)
-            .font(NoorFont.title2)
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: NoorLayout.buttonHeight)
-            .background(Color.noorPink)
-            .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadius))
-    }
-
+    // MARK: - Data Loading
     private func loadGoals() {
         Task { @MainActor in
             isLoading = true
@@ -236,171 +384,214 @@ struct DashboardView: View {
             }
         }
     }
+
+    private func loadGlobalStreak() {
+        globalStreak = UserDefaults.standard.integer(forKey: StorageKey.streakCount)
+    }
 }
 
-// MARK: - Goal card
-struct GoalCardView: View {
+// MARK: - From your vision (one card for Home)
+private struct FromYourVisionBlock: View {
+    let items: [VisionItem]
+    let onOpen: (VisionItem) -> Void
+
+    private var firstUncompleted: VisionItem? {
+        items.first { !$0.isCompleted }
+    }
+
+    var body: some View {
+        if let item = firstUncompleted {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Color.noorRoseGold)
+                    Text("From your vision")
+                        .font(NoorFont.title2)
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 4)
+
+                Button {
+                    onOpen(item)
+                } label: {
+                    HStack(spacing: 14) {
+                        Image(systemName: item.kind.icon)
+                            .font(.system(size: 20))
+                            .foregroundStyle(Color.noorRoseGold)
+                            .frame(width: 40, height: 40)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Act on it")
+                                .font(NoorFont.caption)
+                                .foregroundStyle(Color.noorTextSecondary)
+                            Text(item.title)
+                                .font(NoorFont.body)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.noorRoseGold)
+                    }
+                    .padding(16)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+// MARK: - Journey Card
+struct JourneyCard: View {
     let goal: Goal
-    let todayTasks: [DailyTask]
-    let onToggleTask: (DailyTask) -> Void
 
-    private let calendar = Calendar.current
+    private var progress: Double {
+        guard !goal.dailyTasks.isEmpty else { return 0 }
+        let completed = goal.dailyTasks.filter { $0.isCompleted }.count
+        return Double(completed) / Double(goal.dailyTasks.count) * 100
+    }
 
-    private func isCompletedToday(_ task: DailyTask) -> Bool {
-        let today = calendar.startOfDay(for: Date())
-        return task.completedDates.contains { calendar.isDate($0, inSameDayAs: today) }
+    private var currentChallenge: DailyTask? {
+        goal.dailyTasks
+            .sorted { $0.order < $1.order }
+            .first { $0.isUnlocked && !$0.isCompleted }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            NavigationLink(destination: DailyCheckInView(goal: goal)) {
-                HStack(spacing: 12) {
-                    Image(systemName: iconForCategory(goal.category))
-                        .font(.title2)
-                        .foregroundStyle(Color.noorPink)
-                    Text(goal.title)
+            // Header
+            HStack(spacing: 12) {
+                Image(systemName: iconForCategory(goal.category))
+                    .font(.system(size: 24))
+                    .foregroundStyle(Color.noorRoseGold)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(goal.destination.isEmpty ? goal.title : goal.destination)
                         .font(NoorFont.title2)
-                        .foregroundStyle(Color.noorCharcoal)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(Color.noorCharcoal.opacity(0.5))
+                        .foregroundStyle(.white)
+
+                    if !goal.timeline.isEmpty {
+                        Text("Arrival: \(goal.timeline)")
+                            .font(NoorFont.caption)
+                            .foregroundStyle(Color.noorTextSecondary)
+                    }
+                }
+
+                Spacer()
+
+                // Progress ring
+                ZStack {
+                    Circle()
+                        .stroke(Color.noorViolet.opacity(0.3), lineWidth: 4)
+                        .frame(width: 44, height: 44)
+
+                    Circle()
+                        .trim(from: 0, to: progress / 100)
+                        .stroke(Color.noorRoseGold, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        .frame(width: 44, height: 44)
+                        .rotationEffect(.degrees(-90))
+
+                    Text("\(Int(progress))%")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
                 }
             }
-            .buttonStyle(.plain)
 
-            ForEach(todayTasks, id: \.id) { task in
-                TaskRowView(
-                    task: task,
-                    isCompleted: isCompletedToday(task),
-                    onTap: { onToggleTask(task) }
-                )
+            // Current challenge preview
+            if let challenge = currentChallenge {
+                HStack(spacing: 12) {
+                    Image(systemName: "arrow.right.circle.fill")
+                        .foregroundStyle(Color.noorAccent)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Today")
+                            .font(NoorFont.caption)
+                            .foregroundStyle(Color.noorTextSecondary)
+
+                        Text(challenge.title)
+                            .font(NoorFont.body)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(Color.noorTextSecondary.opacity(0.5))
+                }
+                .padding(12)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else if progress >= 100 {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(Color.noorSuccess)
+
+                    Text("Journey Complete!")
+                        .font(NoorFont.body)
+                        .foregroundStyle(Color.noorSuccess)
+                }
+                .padding(12)
+                .background(Color.noorSuccess.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
 
+            // Streak
             HStack(spacing: 6) {
                 Image(systemName: "flame.fill")
-                    .foregroundStyle(Color.noorPink)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.noorOrange)
+
                 Text("\(goal.currentStreak) day streak")
-                    .font(NoorFont.callout)
-                    .foregroundStyle(Color.noorPink)
+                    .font(NoorFont.caption)
+                    .foregroundStyle(Color.noorTextSecondary)
             }
         }
         .padding(20)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadius))
-        .shadow(color: .black.opacity(0.08), radius: NoorLayout.cardShadowRadius, x: 0, y: NoorLayout.cardShadowY)
+        .background(
+            LinearGradient(
+                colors: [Color.noorDeepPurple, Color.noorViolet.opacity(0.3)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(Color.noorViolet.opacity(0.3), lineWidth: 1)
+        )
     }
 
     private func iconForCategory(_ category: String) -> String {
+        if let goalCat = GoalCategory(rawValue: category) {
+            return goalCat.icon
+        }
         switch category.lowercased() {
         case "fitness": return "figure.run"
         case "mindfulness": return "brain.head.profile"
         case "productivity": return "bolt.fill"
-        case "financial habits": return "dollarsign.circle.fill"
-        case "parenthood": return "heart.circle.fill"
-        case "personal growth": return "leaf.fill"
+        case "financial habits", "finance": return "dollarsign.circle.fill"
+        case "parenthood", "relationship": return "heart.fill"
+        case "personal growth", "growth": return "leaf.fill"
+        case "travel": return "airplane"
+        case "career": return "briefcase.fill"
         default: return "target"
         }
-    }
-}
-
-// MARK: - Task row with checkbox
-struct TaskRowView: View {
-    let task: DailyTask
-    let isCompleted: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) { onTap() }
-        }) {
-            HStack(alignment: .center, spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(isCompleted ? Color.green : Color.gray.opacity(0.5), lineWidth: 2)
-                        .frame(width: 28, height: 28)
-                    if isCompleted {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.green)
-                            .frame(width: 28, height: 28)
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                }
-                .animation(.easeInOut(duration: 0.2), value: isCompleted)
-                Text(task.title)
-                    .font(NoorFont.body)
-                    .foregroundStyle(isCompleted ? Color.noorCharcoal.opacity(0.6) : Color.noorCharcoal)
-                    .strikethrough(isCompleted)
-                Spacer()
-            }
-            .padding(.vertical, 4)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// Placeholder destinations until full flows exist
-struct CreateGoalPlaceholderView: View {
-    var body: some View {
-        Text("Create New Goal")
-            .font(NoorFont.title)
-        Text("Goal creation flow coming soon.")
-            .font(NoorFont.caption)
-            .foregroundStyle(.secondary)
-    }
-}
-
-struct AllGoalsPlaceholderView: View {
-    var body: some View {
-        Text("All Goals")
-            .font(NoorFont.title)
-        Text("Full list coming soon.")
-            .font(NoorFont.caption)
-            .foregroundStyle(.secondary)
-    }
-}
-
-// MARK: - Goal detail (navigation destination)
-struct GoalDetailView: View {
-    let goal: Goal
-    private let calendar = Calendar.current
-
-    private var sortedTasks: [DailyTask] {
-        goal.dailyTasks.sorted { $0.order < $1.order }
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text(goal.goalDescription)
-                    .font(NoorFont.body)
-                    .foregroundStyle(Color.noorCharcoal)
-                HStack(spacing: 8) {
-                    Image(systemName: "flame.fill")
-                        .foregroundStyle(Color.noorPink)
-                    Text("\(goal.currentStreak) day streak • Longest: \(goal.longestStreak)")
-                        .font(NoorFont.callout)
-                        .foregroundStyle(Color.noorCharcoal)
-                }
-                Text("Tasks")
-                    .font(NoorFont.title2)
-                    .foregroundStyle(Color.noorCharcoal)
-                ForEach(sortedTasks, id: \.id) { task in
-                    Text("• \(task.title)")
-                        .font(NoorFont.body)
-                        .foregroundStyle(Color.noorCharcoal)
-                }
-            }
-            .padding(20)
-        }
-        .navigationTitle(goal.title)
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
 #Preview {
     DashboardView()
         .environment(DataManager.shared)
+        .environment(PurchaseManager.shared)
 }

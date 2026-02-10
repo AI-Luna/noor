@@ -2,7 +2,8 @@
 //  GoalsListView.swift
 //  leap
 //
-//  List of all goals: title, streak, last completed; tap → DailyCheckIn, swipe to delete
+//  All flights: active, completed, with filter tabs
+//  "Travel agency for life" - your flight history
 //
 
 import SwiftUI
@@ -15,11 +16,26 @@ struct GoalsListView: View {
     @State private var errorMessage: String?
     @State private var goalToDelete: Goal?
     @State private var showDeleteConfirmation = false
+    @State private var selectedFilter: GoalFilter = .all
+
+    enum GoalFilter: String, CaseIterable {
+        case all = "All"
+        case active = "Active"
+        case completed = "Completed"
+    }
+
+    private var filteredGoals: [Goal] {
+        switch selectedFilter {
+        case .all: return goals
+        case .active: return goals.filter { $0.progress < 100 }
+        case .completed: return goals.filter { $0.progress >= 100 }
+        }
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                LinearGradient.noorPurpleBlue
+                Color.noorBackground
                     .ignoresSafeArea()
 
                 if isLoading {
@@ -29,29 +45,36 @@ struct GoalsListView: View {
                 } else if goals.isEmpty {
                     emptyState
                 } else {
-                    List {
-                        ForEach(goals, id: \.id) { goal in
-                            NavigationLink(destination: DailyCheckInView(goal: goal)) {
-                                GoalRowView(goal: goal)
-                            }
-                            .listRowBackground(Color.white.opacity(0.95))
-                            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                            .listRowSeparatorTint(Color.noorCharcoal.opacity(0.15))
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    goalToDelete = goal
-                                    showDeleteConfirmation = true
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
+                    VStack(spacing: 0) {
+                        // Filter tabs
+                        filterTabs
+                            .padding(.horizontal, 20)
+                            .padding(.top, 8)
+
+                        // Goals list
+                        ScrollView {
+                            LazyVStack(spacing: 12) {
+                                ForEach(filteredGoals, id: \.id) { goal in
+                                    NavigationLink(destination: DailyCheckInView(goal: goal)) {
+                                        FlightRowCard(goal: goal)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .contextMenu {
+                                        Button(role: .destructive) {
+                                            goalToDelete = goal
+                                            showDeleteConfirmation = true
+                                        } label: {
+                                            Label("Cancel Flight", systemImage: "trash")
+                                        }
+                                    }
                                 }
                             }
+                            .padding(20)
                         }
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
                 }
             }
-            .navigationTitle("Goals")
+            .navigationTitle("Your Flights")
             .navigationBarTitleDisplayMode(.large)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .onAppear {
@@ -59,33 +82,59 @@ struct GoalsListView: View {
                 loadGoals()
             }
             .refreshable { loadGoals() }
-            .confirmationDialog("Delete Goal", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
-                Button("Delete", role: .destructive) {
+            .confirmationDialog("Cancel Flight", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+                Button("Cancel Flight", role: .destructive) {
                     if let goal = goalToDelete {
                         deleteGoal(goal)
                     }
                     goalToDelete = nil
                 }
-                Button("Cancel", role: .cancel) {
+                Button("Keep", role: .cancel) {
                     goalToDelete = nil
                 }
             } message: {
-                Text("Are you sure? This cannot be undone.")
+                Text("Are you sure you want to cancel this flight? This cannot be undone.")
             }
         }
     }
 
+    private var filterTabs: some View {
+        HStack(spacing: 8) {
+            ForEach(GoalFilter.allCases, id: \.self) { filter in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedFilter = filter
+                    }
+                } label: {
+                    Text(filter.rawValue)
+                        .font(NoorFont.callout)
+                        .foregroundStyle(selectedFilter == filter ? .white : Color.noorTextSecondary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(selectedFilter == filter ? Color.noorViolet : Color.white.opacity(0.08))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+        }
+    }
+
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "target")
-                .font(.system(size: 48))
-                .foregroundStyle(.white.opacity(0.7))
-            Text("No goals yet")
-                .font(NoorFont.title2)
-                .foregroundStyle(.white)
-            Text("Create one from the Home tab")
-                .font(NoorFont.caption)
-                .foregroundStyle(.white.opacity(0.8))
+        VStack(spacing: 20) {
+            Image(systemName: "airplane")
+                .font(.system(size: 56))
+                .foregroundStyle(Color.noorRoseGold.opacity(0.6))
+
+            VStack(spacing: 8) {
+                Text("No flights booked yet")
+                    .font(NoorFont.title)
+                    .foregroundStyle(.white)
+
+                Text("Book your first flight from the Home tab")
+                    .font(NoorFont.body)
+                    .foregroundStyle(Color.noorTextSecondary)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -115,66 +164,101 @@ struct GoalsListView: View {
     }
 }
 
-// MARK: - Goal row
-private struct GoalRowView: View {
+// MARK: - Flight Row Card
+private struct FlightRowCard: View {
     let goal: Goal
 
-    private var lastCompletedDate: Date? {
-        let allDates = goal.dailyTasks.flatMap(\.completedDates)
-        return allDates.max()
+    private var progress: Double {
+        guard !goal.dailyTasks.isEmpty else { return 0 }
+        let completed = goal.dailyTasks.filter { $0.isCompleted }.count
+        return Double(completed) / Double(goal.dailyTasks.count) * 100
     }
 
-    private var lastCompletedText: String {
-        guard let date = lastCompletedDate else { return "Not yet" }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
+    private var isComplete: Bool {
+        progress >= 100
     }
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: iconForCategory(goal.category))
-                .font(.title2)
-                .foregroundStyle(Color.noorPink)
-                .frame(width: 36, alignment: .center)
+        HStack(spacing: 16) {
+            // Category icon
+            ZStack {
+                Circle()
+                    .fill(isComplete ? Color.noorSuccess.opacity(0.2) : Color.noorViolet.opacity(0.3))
+                    .frame(width: 48, height: 48)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(goal.title)
-                    .font(NoorFont.callout)
-                    .foregroundStyle(Color.noorCharcoal)
+                Image(systemName: iconForCategory(goal.category))
+                    .font(.system(size: 20))
+                    .foregroundStyle(isComplete ? Color.noorSuccess : Color.noorRoseGold)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(goal.destination.isEmpty ? goal.title : goal.destination)
+                    .font(NoorFont.body)
+                    .foregroundStyle(.white)
+
                 HStack(spacing: 12) {
+                    if !goal.timeline.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "calendar")
+                                .font(.system(size: 10))
+                            Text(goal.timeline)
+                        }
+                        .font(NoorFont.caption)
+                        .foregroundStyle(Color.noorTextSecondary)
+                    }
+
                     HStack(spacing: 4) {
                         Image(systemName: "flame.fill")
-                            .font(.caption2)
-                            .foregroundStyle(Color.noorPink)
-                        Text("\(goal.currentStreak) day streak")
-                            .font(NoorFont.caption)
-                            .foregroundStyle(Color.noorCharcoal.opacity(0.8))
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.noorOrange)
+                        Text("\(goal.currentStreak)")
                     }
-                    Text("•")
-                        .foregroundStyle(Color.noorCharcoal.opacity(0.5))
-                    Text(lastCompletedText)
-                        .font(NoorFont.caption)
-                        .foregroundStyle(Color.noorCharcoal.opacity(0.7))
+                    .font(NoorFont.caption)
+                    .foregroundStyle(Color.noorTextSecondary)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Spacer()
+
+            // Progress or complete badge
+            if isComplete {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(Color.noorSuccess)
+            } else {
+                VStack(spacing: 2) {
+                    Text("\(Int(progress))%")
+                        .font(NoorFont.callout)
+                        .foregroundStyle(.white)
+
+                    Text("progress")
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color.noorTextSecondary)
+                }
+            }
 
             Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(Color.noorCharcoal.opacity(0.4))
+                .font(.system(size: 12))
+                .foregroundStyle(Color.noorTextSecondary.opacity(0.5))
         }
-        .padding(.vertical, 4)
+        .padding(16)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
     private func iconForCategory(_ category: String) -> String {
+        if let goalCat = GoalCategory(rawValue: category) {
+            return goalCat.icon
+        }
         switch category.lowercased() {
         case "fitness": return "figure.run"
         case "mindfulness": return "brain.head.profile"
         case "productivity": return "bolt.fill"
-        case "financial habits": return "dollarsign.circle.fill"
-        case "parenthood": return "heart.circle.fill"
-        case "personal growth": return "leaf.fill"
+        case "financial habits", "finance": return "dollarsign.circle.fill"
+        case "parenthood", "relationship": return "heart.fill"
+        case "personal growth", "growth": return "leaf.fill"
+        case "travel": return "airplane"
+        case "career": return "briefcase.fill"
         default: return "target"
         }
     }

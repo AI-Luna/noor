@@ -2,28 +2,12 @@
 //  CreateGoalView.swift
 //  leap
 //
-//  3-step modal: Category → Goal details → Micro-actions, then save. Pro-gated.
+//  Goal creation with AI-generated itinerary
+//  "Travel agency for life" - book your flight to the future
 //
 
 import SwiftUI
 import SwiftData
-
-// MARK: - Category model for selection
-struct GoalCategoryItem: Identifiable {
-    let id: String
-    let name: String
-    let icon: String
-    let color: Color
-}
-
-private let goalCategories: [GoalCategoryItem] = [
-    GoalCategoryItem(id: "Fitness", name: "Fitness", icon: "figure.run", color: Color(hex: "4ECDC4")),
-    GoalCategoryItem(id: "Mindfulness", name: "Mindfulness", icon: "brain.head.profile", color: Color(hex: "9B59B6")),
-    GoalCategoryItem(id: "Productivity", name: "Productivity", icon: "bolt.fill", color: Color(hex: "F39C12")),
-    GoalCategoryItem(id: "Financial Habits", name: "Financial Habits", icon: "dollarsign.circle.fill", color: Color(hex: "27AE60")),
-    GoalCategoryItem(id: "Parenthood", name: "Parenthood", icon: "heart.circle.fill", color: Color(hex: "E91E8C")),
-    GoalCategoryItem(id: "Personal Growth", name: "Personal Growth", icon: "leaf.fill", color: Color(hex: "3498DB")),
-]
 
 // MARK: - Create Goal View
 struct CreateGoalView: View {
@@ -32,23 +16,23 @@ struct CreateGoalView: View {
     @Environment(PurchaseManager.self) private var purchaseManager
 
     @State private var step: Int = 1
-    @State private var selectedCategory: GoalCategoryItem?
-    @State private var goalTitle: String = ""
-    @State private var goalDescription: String = ""
-    @State private var daysPerWeek: Int = 5
-    @State private var tasks: [(title: String, description: String)] = [("", "")]
+    @State private var selectedCategory: GoalCategory?
+    @State private var destination: String = ""
+    @State private var timeline: String = ""
+    @State private var userStory: String = ""
+    @State private var generatedChallenges: [AIChallenge] = []
+    @State private var boardingPass: String = ""
+    @State private var isGenerating = false
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var showPaywall = false
     @State private var existingGoalCount = 0
 
-    private let maxTasks = 3
-    private let minTasks = 1
-
     var body: some View {
         NavigationStack {
             ZStack {
-                stepGradient
+                // Background
+                Color.noorBackground
                     .ignoresSafeArea()
 
                 VStack(spacing: 0) {
@@ -58,7 +42,8 @@ struct CreateGoalView: View {
                             switch step {
                             case 1: step1Category
                             case 2: step2Details
-                            case 3: step3Tasks
+                            case 3: step3Loading
+                            case 4: step4Itinerary
                             default: EmptyView()
                             }
                         }
@@ -69,14 +54,16 @@ struct CreateGoalView: View {
                     if let err = errorMessage {
                         Text(err)
                             .font(NoorFont.caption)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.noorCoral)
                             .padding(.horizontal)
                     }
 
-                    primaryButton
+                    if step != 3 {
+                        primaryButton
+                    }
                 }
             }
-            .navigationTitle("New Goal")
+            .navigationTitle("Book a Flight")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
@@ -89,28 +76,17 @@ struct CreateGoalView: View {
             .sheet(isPresented: $showPaywall) {
                 PaywallView(
                     onDismiss: { showPaywall = false },
-                    proGateMessage: "Pro members can create unlimited goals"
+                    proGateMessage: "Unlock unlimited flights with Pro"
                 )
             }
         }
     }
 
-    private var stepGradient: LinearGradient {
-        switch step {
-        case 1:
-            LinearGradient(colors: [Color(red: 0.58, green: 0.2, blue: 0.8), Color(red: 0.2, green: 0.4, blue: 0.9)], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case 2:
-            LinearGradient(colors: [Color(hex: "1A535C"), Color(hex: "4ECDC4")], startPoint: .topLeading, endPoint: .bottomTrailing)
-        default:
-            LinearGradient(colors: [Color(hex: "E91E8C"), Color(hex: "FF6B6B")], startPoint: .topLeading, endPoint: .bottomTrailing)
-        }
-    }
-
     private var stepIndicator: some View {
         HStack(spacing: 8) {
-            ForEach(1...3, id: \.self) { i in
+            ForEach(1...4, id: \.self) { i in
                 Capsule()
-                    .fill(step >= i ? Color.white : Color.white.opacity(0.3))
+                    .fill(step >= i ? Color.noorRoseGold : Color.white.opacity(0.2))
                     .frame(height: 4)
                     .frame(maxWidth: .infinity)
             }
@@ -119,31 +95,48 @@ struct CreateGoalView: View {
         .padding(.top, 12)
     }
 
-    // MARK: - Step 1: Category
+    // MARK: - Step 1: Category Selection
     private var step1Category: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Choose a category")
-                .font(NoorFont.largeTitle)
-                .foregroundStyle(.white)
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                ForEach(goalCategories) { cat in
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Let's book your next flight.")
+                    .font(NoorFont.largeTitle)
+                    .foregroundStyle(.white)
+
+                Text("Where are you traveling?")
+                    .font(NoorFont.bodyLarge)
+                    .foregroundStyle(Color.noorTextSecondary)
+            }
+
+            VStack(spacing: 12) {
+                ForEach(GoalCategory.allCases) { category in
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { selectedCategory = cat }
-                    } label: {
-                        VStack(spacing: 10) {
-                            Image(systemName: cat.icon)
-                                .font(.system(size: 28))
-                                .foregroundStyle(selectedCategory?.id == cat.id ? .white : cat.color)
-                            Text(cat.name)
-                                .font(NoorFont.caption)
-                                .foregroundStyle(.white)
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
+                        let generator = UIImpactFeedbackGenerator(style: .light)
+                        generator.impactOccurred()
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedCategory = category
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                        .background(selectedCategory?.id == cat.id ? cat.color.opacity(0.9) : Color.white.opacity(0.15))
-                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                    } label: {
+                        HStack(spacing: 16) {
+                            Image(systemName: category.icon)
+                                .font(.system(size: 24))
+                                .foregroundStyle(selectedCategory == category ? .white : Color.noorRoseGold)
+                                .frame(width: 40)
+
+                            Text(category.displayName)
+                                .font(NoorFont.body)
+                                .foregroundStyle(selectedCategory == category ? .white : Color.noorTextSecondary)
+
+                            Spacer()
+
+                            if selectedCategory == category {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(Color.noorSuccess)
+                            }
+                        }
+                        .padding(16)
+                        .background(selectedCategory == category ? Color.noorViolet.opacity(0.5) : Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
                     .buttonStyle(.plain)
                 }
@@ -151,127 +144,226 @@ struct CreateGoalView: View {
         }
     }
 
-    // MARK: - Step 2: Details
+    // MARK: - Step 2: Destination Details
     private var step2Details: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Goal details")
-                .font(NoorFont.largeTitle)
-                .foregroundStyle(.white)
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(selectedCategory?.travelAgencyTitle ?? "Tell us more")
+                    .font(NoorFont.largeTitle)
+                    .foregroundStyle(.white)
+            }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Title")
+                Text("Destination")
                     .font(NoorFont.callout)
-                    .foregroundStyle(.white.opacity(0.9))
-                TextField("e.g. Build a morning routine", text: $goalTitle)
+                    .foregroundStyle(Color.noorTextSecondary)
+
+                TextField(selectedCategory?.destinationPlaceholder ?? "Your goal", text: $destination)
                     .textFieldStyle(.plain)
+                    .font(NoorFont.body)
+                    .foregroundStyle(.white)
                     .padding(16)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
-                    .foregroundStyle(Color.noorCharcoal)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Description (optional)")
+                Text("When are you arriving?")
                     .font(NoorFont.callout)
-                    .foregroundStyle(.white.opacity(0.9))
-                TextEditor(text: $goalDescription)
+                    .foregroundStyle(Color.noorTextSecondary)
+
+                TextField("June 2026", text: $timeline)
+                    .textFieldStyle(.plain)
+                    .font(NoorFont.body)
+                    .foregroundStyle(.white)
+                    .padding(16)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(selectedCategory?.storyPrompt ?? "Why does this matter to you?")
+                    .font(NoorFont.callout)
+                    .foregroundStyle(Color.noorTextSecondary)
+
+                TextEditor(text: $userStory)
                     .scrollContentBackground(.hidden)
-                    .padding(12)
-                    .frame(minHeight: 80)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
-                    .foregroundStyle(Color.noorCharcoal)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Days per week")
-                    .font(NoorFont.callout)
-                    .foregroundStyle(.white.opacity(0.9))
-                Picker("", selection: $daysPerWeek) {
-                    ForEach(1...7, id: \.self) { n in
-                        Text("\(n) day\(n == 1 ? "" : "s")").tag(n)
-                    }
-                }
-                .pickerStyle(.menu)
-                .tint(.white)
+                    .font(NoorFont.body)
+                    .foregroundStyle(.white)
+                    .frame(minHeight: 100)
+                    .padding(16)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
             }
         }
     }
 
-    // MARK: - Step 3: Tasks
-    private var step3Tasks: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Daily micro-actions")
-                .font(NoorFont.largeTitle)
-                .foregroundStyle(.white)
-            Text("Add 2–3 small tasks you’ll do each day.")
-                .font(NoorFont.caption)
-                .foregroundStyle(.white.opacity(0.9))
+    // MARK: - Step 3: AI Generation Loading
+    private var step3Loading: some View {
+        VStack(spacing: 40) {
+            Spacer().frame(height: 60)
 
-            ForEach(tasks.indices, id: \.self) { index in
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Task \(index + 1)")
-                        .font(NoorFont.callout)
-                        .foregroundStyle(.white.opacity(0.9))
-                    TextField("Task title", text: Binding(
-                        get: { tasks.indices.contains(index) ? tasks[index].title : "" },
-                        set: { newVal in
-                            if tasks.indices.contains(index) {
-                                tasks[index] = (newVal, tasks[index].description)
-                            }
+            // Boarding pass visual
+            ZStack {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color.white.opacity(0.1))
+                    .frame(width: 280, height: 160)
+
+                VStack(spacing: 12) {
+                    Image(systemName: "ticket.fill")
+                        .font(.system(size: 40))
+                        .foregroundStyle(Color.noorRoseGold)
+                        .rotationEffect(.degrees(-15))
+
+                    HStack(spacing: 8) {
+                        ForEach(0..<3) { i in
+                            Circle()
+                                .fill(Color.noorRoseGold)
+                                .frame(width: 8, height: 8)
+                                .opacity(isGenerating ? 1 : 0.3)
+                                .animation(
+                                    .easeInOut(duration: 0.5)
+                                    .repeatForever()
+                                    .delay(Double(i) * 0.2),
+                                    value: isGenerating
+                                )
                         }
-                    ))
-                    .textFieldStyle(.plain)
-                    .padding(16)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
-                    .foregroundStyle(Color.noorCharcoal)
-                    TextField("Description (optional)", text: Binding(
-                        get: { tasks.indices.contains(index) ? tasks[index].description : "" },
-                        set: { newVal in
-                            if tasks.indices.contains(index) {
-                                tasks[index] = (tasks[index].title, newVal)
-                            }
-                        }
-                    ))
-                    .textFieldStyle(.plain)
-                    .padding(12)
-                    .background(Color.white.opacity(0.9))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .foregroundStyle(Color.noorCharcoal)
+                    }
                 }
             }
 
-            if tasks.count < maxTasks {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { tasks.append(("", "")) }
-                } label: {
-                    HStack {
-                        Image(systemName: "plus.circle.fill")
-                        Text("Add another task")
-                    }
-                    .font(NoorFont.callout)
+            VStack(spacing: 16) {
+                Text("Mapping your route...")
+                    .font(NoorFont.title)
                     .foregroundStyle(.white)
+
+                Text("Destination: \(destination)")
+                    .font(NoorFont.body)
+                    .foregroundStyle(Color.noorTextSecondary)
+
+                Text("Building your 7-step itinerary")
+                    .font(NoorFont.caption)
+                    .foregroundStyle(Color.noorRoseGold)
+            }
+
+            Spacer()
+        }
+        .onAppear {
+            isGenerating = true
+            generateItinerary()
+        }
+    }
+
+    // MARK: - Step 4: Itinerary Reveal
+    private var step4Itinerary: some View {
+        VStack(spacing: 24) {
+            // Header
+            VStack(spacing: 8) {
+                Image(systemName: selectedCategory?.icon ?? "target")
+                    .font(.system(size: 40))
+                    .foregroundStyle(Color.noorRoseGold)
+
+                Text("Your \(destination) Itinerary")
+                    .font(NoorFont.largeTitle)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+
+                Text("Departure: Now | Arrival: \(timeline.isEmpty ? "Your timeline" : timeline)")
+                    .font(NoorFont.caption)
+                    .foregroundStyle(Color.noorTextSecondary)
+            }
+
+            // Challenges list
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Your 7-Step Boarding Process")
+                    .font(NoorFont.title2)
+                    .foregroundStyle(.white)
+
+                ForEach(Array(generatedChallenges.enumerated()), id: \.element.id) { index, challenge in
+                    HStack(spacing: 16) {
+                        ZStack {
+                            Circle()
+                                .fill(challenge.unlocked ? Color.noorViolet : Color.white.opacity(0.1))
+                                .frame(width: 32, height: 32)
+
+                            if challenge.unlocked {
+                                Text("\(index + 1)")
+                                    .font(NoorFont.callout)
+                                    .foregroundStyle(.white)
+                            } else {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color.noorTextSecondary.opacity(0.5))
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(challenge.title)
+                                .font(NoorFont.body)
+                                .foregroundStyle(challenge.unlocked ? .white : Color.noorTextSecondary.opacity(0.5))
+
+                            if challenge.unlocked {
+                                Text(challenge.estimatedTime)
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorRoseGold)
+                            }
+                        }
+
+                        Spacer()
+                    }
+                    .padding(12)
+                    .background(Color.white.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
-                .padding(.top, 8)
+            }
+
+            // Boarding pass message
+            if !boardingPass.isEmpty {
+                Text(boardingPass)
+                    .font(NoorFont.body)
+                    .foregroundStyle(Color.noorRoseGold)
+                    .italic()
+                    .multilineTextAlignment(.center)
+                    .padding(.vertical, 8)
+            }
+
+            // Regenerate button
+            Button {
+                step = 3
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                    Text("Request New Route")
+                }
+                .font(NoorFont.callout)
+                .foregroundStyle(Color.noorTextSecondary)
             }
         }
     }
 
     private var primaryButton: some View {
         Group {
-            if step == 1 {
-                nextButton(title: "Next") { tryAdvanceFromStep1() }
-            } else if step == 2 {
-                nextButton(title: "Next") { advanceStep() }
-            } else {
-                nextButton(title: "Create Goal", isLoading: isSaving) { submitGoal() }
+            switch step {
+            case 1:
+                actionButton(title: "Next", isDisabled: selectedCategory == nil) {
+                    tryAdvanceFromStep1()
+                }
+            case 2:
+                actionButton(title: "Book my itinerary", isDisabled: destination.isEmpty) {
+                    advanceToGeneration()
+                }
+            case 4:
+                actionButton(title: "Accept Itinerary", isLoading: isSaving) {
+                    saveGoal()
+                }
+            default:
+                EmptyView()
             }
         }
         .padding(20)
     }
 
-    private func nextButton(title: String, isLoading: Bool = false, action: @escaping () -> Void) -> some View {
+    private func actionButton(title: String, isDisabled: Bool = false, isLoading: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
                 if isLoading {
@@ -281,17 +373,18 @@ struct CreateGoalView: View {
                     Text(title)
                 }
             }
-            .font(NoorFont.title2)
+            .font(NoorFont.button)
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .frame(height: 56)
-            .background(Color.noorPink)
+            .background(isDisabled ? Color.noorAccent.opacity(0.4) : Color.noorAccent)
             .clipShape(RoundedRectangle(cornerRadius: 20))
         }
-        .disabled(isLoading)
+        .disabled(isDisabled || isLoading)
         .buttonStyle(.plain)
     }
 
+    // MARK: - Actions
     private func loadGoalCount() {
         Task { @MainActor in
             do {
@@ -309,65 +402,85 @@ struct CreateGoalView: View {
     private func tryAdvanceFromStep1() {
         errorMessage = nil
         guard selectedCategory != nil else {
-            errorMessage = "Please select a category."
+            errorMessage = "Please select a destination."
             return
         }
         if existingGoalCount >= 1 && !purchaseManager.isPro {
             showPaywall = true
             return
         }
-        advanceStep()
+        withAnimation(.easeInOut(duration: 0.3)) {
+            step = 2
+        }
     }
 
-    private func advanceStep() {
-        if step == 2 {
-            guard !goalTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                errorMessage = "Please enter a goal title."
-                return
-            }
+    private func advanceToGeneration() {
+        guard !destination.trimmingCharacters(in: .whitespaces).isEmpty else {
+            errorMessage = "Please enter a destination."
+            return
         }
         errorMessage = nil
         withAnimation(.easeInOut(duration: 0.3)) {
-            step = min(step + 1, 3)
+            step = 3
         }
     }
 
-    private func submitGoal() {
-        errorMessage = nil
-        let trimmedTitle = goalTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else {
-            errorMessage = "Please enter a goal title."
-            return
-        }
-        let filledTasks = tasks.map { ($0.title.trimmingCharacters(in: .whitespacesAndNewlines), $0.description.trimmingCharacters(in: .whitespacesAndNewlines)) }
-            .filter { !$0.0.isEmpty }
-        guard filledTasks.count >= minTasks else {
-            errorMessage = "Add at least one task."
-            return
-        }
+    private func generateItinerary() {
+        Task {
+            guard let category = selectedCategory else { return }
 
+            let result = await AIService.shared.generateChallenges(
+                category: category,
+                destination: destination,
+                timeline: timeline,
+                userStory: userStory
+            )
+
+            await MainActor.run {
+                if let result = result {
+                    generatedChallenges = result.challenges
+                    boardingPass = result.encouragement
+                }
+                isGenerating = false
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    step = 4
+                }
+            }
+        }
+    }
+
+    private func saveGoal() {
         isSaving = true
         Task { @MainActor in
             defer { isSaving = false }
             do {
-                let categoryName = selectedCategory?.name ?? "Personal Growth"
+                guard let category = selectedCategory else { return }
+
                 let goal = Goal(
-                    title: trimmedTitle,
-                    goalDescription: goalDescription.trimmingCharacters(in: .whitespacesAndNewlines),
-                    category: categoryName,
-                    targetDaysPerWeek: daysPerWeek
+                    title: destination,
+                    goalDescription: userStory,
+                    category: category.rawValue,
+                    destination: destination,
+                    timeline: timeline,
+                    userStory: userStory,
+                    boardingPass: boardingPass,
+                    targetDaysPerWeek: 7
                 )
+
                 let goalID = goal.id.uuidString
-                for (i, t) in filledTasks.enumerated() {
+                for (index, challenge) in generatedChallenges.enumerated() {
                     let task = DailyTask(
                         goalID: goalID,
-                        title: t.0,
-                        taskDescription: t.1,
-                        order: i
+                        title: challenge.title,
+                        taskDescription: challenge.description,
+                        estimatedTime: challenge.estimatedTime,
+                        order: index,
+                        isUnlocked: index == 0,
+                        goal: goal
                     )
-                    task.goal = goal
                     goal.dailyTasks.append(task)
                 }
+
                 try await dataManager.saveGoal(goal)
                 dismiss()
             } catch {
