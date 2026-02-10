@@ -50,6 +50,18 @@ struct NoorFont {
     static let caption = Font.system(size: 13, weight: .regular)
 }
 
+// MARK: - Gradients (Dashboard / design system)
+extension LinearGradient {
+    static let noorPurpleBlue = LinearGradient(
+        colors: [
+            Color(red: 0.58, green: 0.2, blue: 0.8),   // deep purple
+            Color(red: 0.2, green: 0.4, blue: 0.9)     // deep blue
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+}
+
 // MARK: - Layout
 struct NoorLayout {
     static let cornerRadius: CGFloat = 16

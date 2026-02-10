@@ -6,25 +6,24 @@
 //
 
 import SwiftUI
+import RevenueCat
 
 @main
-struct leapApp: App {
-    @State private var hasSeenOnboarding: Bool = UserDefaults.standard.bool(forKey: StorageKey.hasSeenOnboarding)
+struct LeapApp: App {
+    @State private var purchaseManager = PurchaseManager.shared
+    @State private var dataManager = DataManager.shared
 
     init() {
         PurchaseManager.shared.configure()
+        DataManager.shared.initialize()
     }
 
     var body: some Scene {
         WindowGroup {
-            if hasSeenOnboarding {
-                ContentView()
-            } else {
-                WelcomeView(onFinish: {
-                    UserDefaults.standard.set(true, forKey: StorageKey.hasSeenOnboarding)
-                    hasSeenOnboarding = true
-                })
-            }
+            ContentView()
+                .environment(purchaseManager)
+                .environment(dataManager)
+                .preferredColorScheme(.dark)
         }
     }
 }

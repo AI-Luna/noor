@@ -22,7 +22,7 @@ final class PurchaseManager {
 
     func configure() {
         Purchases.logLevel = .debug
-        Purchases.configure(withAPIKey: "test_pXunUucHbMvtUJVPFwUkjyaltum")
+        Purchases.configure(withAPIKey: "appl_AVqBhmgwruxAfUtlyqDyuPcTNNT")
         Task { await checkProStatus() }
         Task { await loadOfferings() }
     }
