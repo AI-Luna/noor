@@ -165,7 +165,10 @@ final class Microhabit {
     var focusDurationMinutes: Int
     var typeRaw: String
     var timeframeRaw: String? // "morning" | "afternoon" | "nightly" | "rightNow" | nil = anytime
+    var habitHour: Int?       // 0–23, preferred time of day for the habit (optional)
+    var habitMinute: Int?     // 0–59
     var reminderFrequencyRaw: String?
+    var reminderDaysRaw: String?  // comma-separated 0–6 (Sun–Sat); e.g. "0,1,2,3,4,5,6" = every day
     var reminderHour: Int?    // 0–23, when to remind (optional for backward compatibility)
     var reminderMinute: Int?  // 0–59
     var completedDates: [Date]
@@ -188,6 +191,16 @@ final class Microhabit {
         set { reminderFrequencyRaw = newValue.rawValue }
     }
 
+    /// Selected reminder days (0 = Sunday … 6 = Saturday). Nil = use reminderFrequency for backward compat.
+    @Transient
+    var reminderDays: Set<Int> {
+        get {
+            guard let raw = reminderDaysRaw, !raw.isEmpty else { return [] }
+            return Set(raw.split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }.filter { (0...6).contains($0) })
+        }
+        set { reminderDaysRaw = newValue.isEmpty ? nil : newValue.sorted().map(String.init).joined(separator: ",") }
+    }
+
     init(
         id: UUID = UUID(),
         title: String,
@@ -197,7 +210,10 @@ final class Microhabit {
         focusDurationMinutes: Int = 5,
         type: MicrohabitType = .create,
         timeframe: HabitTimeframe = .anytime,
+        habitHour: Int? = nil,
+        habitMinute: Int? = nil,
         reminderFrequency: HabitReminderFrequency = .never,
+        reminderDaysRaw: String? = nil,
         reminderHour: Int? = 9,
         reminderMinute: Int? = 0,
         completedDates: [Date] = [],
@@ -211,7 +227,10 @@ final class Microhabit {
         self.focusDurationMinutes = focusDurationMinutes
         self.typeRaw = type.rawValue
         self.timeframeRaw = timeframe.rawValue
+        self.habitHour = habitHour
+        self.habitMinute = habitMinute
         self.reminderFrequencyRaw = reminderFrequency.rawValue
+        self.reminderDaysRaw = reminderDaysRaw
         self.reminderHour = reminderHour
         self.reminderMinute = reminderMinute
         self.completedDates = completedDates
@@ -220,6 +239,18 @@ final class Microhabit {
 
     @Transient
     var hasFocusTimer: Bool { focusDurationMinutes > 0 }
+
+    /// Display string for reminder repeat (e.g. "Every day", "Mon, Wed, Fri")
+    @Transient
+    var reminderDaysDisplayName: String {
+        let d = reminderDays
+        if d.isEmpty { return reminderFrequency.displayName }
+        if d == Set(0...6) { return "Every day" }
+        if d == Set(1...5) { return "Weekdays" }
+        if d == Set([0, 6]) { return "Weekends" }
+        let names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        return d.sorted().map { names[$0] }.joined(separator: ", ")
+    }
 }
 
 enum HabitTimeframe: String, CaseIterable {

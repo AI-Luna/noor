@@ -60,8 +60,6 @@ struct VisionView: View {
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 14) {
-                            sectionHeader
-
                             Picker("Organize", selection: $organizationMode) {
                                 ForEach(VisionOrganizationMode.allCases, id: \.self) { m in
                                     Text(m.rawValue).tag(m)
@@ -123,9 +121,14 @@ struct VisionView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text("Vision")
-                        .font(.system(size: 20, weight: .bold, design: .serif))
-                        .foregroundStyle(.white)
+                    VStack(spacing: 2) {
+                        Text("Vision")
+                            .font(.system(size: 20, weight: .bold, design: .serif))
+                            .foregroundStyle(.white)
+                        Text("See it, then act on it")
+                            .font(NoorFont.caption)
+                            .foregroundStyle(Color.noorTextSecondary)
+                    }
                 }
             }
             .onAppear {
@@ -153,18 +156,6 @@ struct VisionView: View {
                 goals = []
             }
         }
-    }
-
-    private var sectionHeader: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Inspiration & action")
-                .font(NoorFont.title)
-                .foregroundStyle(.white)
-            Text("See it. Then act on it.")
-                .font(NoorFont.caption)
-                .foregroundStyle(Color.noorTextSecondary)
-        }
-        .padding(.horizontal, 4)
     }
 
     private var emptyState: some View {
