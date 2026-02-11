@@ -32,19 +32,25 @@ struct ProfileView: View {
                     .ignoresSafeArea()
 
                 ScrollView {
-                    VStack(spacing: 18) {
+                    VStack(alignment: .leading, spacing: 18) {
                         profileHeader
                         statsSection
                         subscriptionSection
                         aboutSection
                     }
                     .padding(20)
-                    .padding(.bottom, 40)
+                    .padding(.bottom, 16)
                 }
             }
-            .navigationTitle("Profile")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Profile")
+                        .font(.system(size: 24, weight: .bold, design: .serif))
+                        .foregroundStyle(.white)
+                }
+            }
             .onAppear { loadStats() }
             .sheet(isPresented: $showPaywall) {
                 PaywallView(onDismiss: { showPaywall = false })
@@ -57,9 +63,9 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: - Profile Header (compact; no large avatar)
+    // MARK: - Profile Header (centered avatar + name)
     private var profileHeader: some View {
-        HStack(spacing: 12) {
+        VStack(spacing: 8) {
             ZStack {
                 Circle()
                     .fill(
@@ -69,28 +75,28 @@ struct ProfileView: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 40, height: 40)
+                    .frame(width: 64, height: 64)
                 Text(String(userName.prefix(1)).uppercased())
-                    .font(.system(size: 16, weight: .bold, design: .serif))
+                    .font(.system(size: 26, weight: .bold, design: .serif))
                     .foregroundStyle(.white)
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(userName)
-                    .font(NoorFont.title2)
-                    .foregroundStyle(.white)
-                if purchaseManager.isPro {
-                    HStack(spacing: 4) {
-                        Image(systemName: "crown.fill")
-                            .font(.system(size: 10))
-                            .foregroundStyle(Color.noorRoseGold)
-                        Text("Pro Traveler")
-                            .font(NoorFont.caption)
-                            .foregroundStyle(Color.noorRoseGold)
-                    }
+
+            Text(userName)
+                .font(NoorFont.title2)
+                .foregroundStyle(.white)
+
+            if purchaseManager.isPro {
+                HStack(spacing: 4) {
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.noorRoseGold)
+                    Text("Pro Traveler")
+                        .font(NoorFont.caption)
+                        .foregroundStyle(Color.noorRoseGold)
                 }
             }
-            Spacer()
         }
+        .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
     }
 
@@ -120,7 +126,7 @@ struct ProfileView: View {
                     icon: "checkmark.circle.fill",
                     iconColor: Color.noorSuccess,
                     value: "\(completedChallenges)",
-                    label: "Steps Complete"
+                    label: "Missions\nComplete"
                 )
             }
         }
@@ -302,9 +308,9 @@ struct StatCard: View {
     let label: String
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 24))
+                .font(.system(size: 20))
                 .foregroundStyle(iconColor)
 
             Text(value)
@@ -315,10 +321,12 @@ struct StatCard: View {
                 .font(NoorFont.caption)
                 .foregroundStyle(Color.noorTextSecondary)
                 .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
-        .background(Color.white.opacity(0.08))
+        .padding(.vertical, 16)
+        .background(iconColor.opacity(0.1))
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 }

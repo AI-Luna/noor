@@ -86,7 +86,7 @@ struct CreateGoalView: View {
         HStack(spacing: 8) {
             ForEach(1...4, id: \.self) { i in
                 Capsule()
-                    .fill(step >= i ? Color.noorRoseGold : Color.white.opacity(0.2))
+                    .fill(step >= i ? Color.noorAccent : Color.white.opacity(0.2))
                     .frame(height: 4)
                     .frame(maxWidth: .infinity)
             }
@@ -120,7 +120,7 @@ struct CreateGoalView: View {
                         HStack(spacing: 16) {
                             Image(systemName: category.icon)
                                 .font(.system(size: 24))
-                                .foregroundStyle(selectedCategory == category ? .white : Color.noorRoseGold)
+                                .foregroundStyle(selectedCategory == category ? .white : Color.noorAccent)
                                 .frame(width: 40)
 
                             Text(category.displayName)
@@ -212,13 +212,13 @@ struct CreateGoalView: View {
                 VStack(spacing: 12) {
                     Image(systemName: "ticket.fill")
                         .font(.system(size: 40))
-                        .foregroundStyle(Color.noorRoseGold)
+                        .foregroundStyle(Color.noorAccent)
                         .rotationEffect(.degrees(-15))
 
                     HStack(spacing: 8) {
                         ForEach(0..<3) { i in
                             Circle()
-                                .fill(Color.noorRoseGold)
+                                .fill(Color.noorAccent)
                                 .frame(width: 8, height: 8)
                                 .opacity(isGenerating ? 1 : 0.3)
                                 .animation(
@@ -243,7 +243,7 @@ struct CreateGoalView: View {
 
                 Text("Building your 7-step itinerary")
                     .font(NoorFont.caption)
-                    .foregroundStyle(Color.noorRoseGold)
+                    .foregroundStyle(Color.noorAccent)
             }
 
             Spacer()
@@ -261,7 +261,7 @@ struct CreateGoalView: View {
             VStack(spacing: 8) {
                 Image(systemName: selectedCategory?.icon ?? "target")
                     .font(.system(size: 40))
-                    .foregroundStyle(Color.noorRoseGold)
+                    .foregroundStyle(Color.noorAccent)
 
                 Text("Your \(destination) Itinerary")
                     .font(NoorFont.largeTitle)
@@ -305,7 +305,7 @@ struct CreateGoalView: View {
                             if challenge.unlocked {
                                 Text(challenge.estimatedTime)
                                     .font(NoorFont.caption)
-                                    .foregroundStyle(Color.noorRoseGold)
+                                    .foregroundStyle(Color.noorAccent)
                             }
                         }
 
@@ -321,7 +321,7 @@ struct CreateGoalView: View {
             if !boardingPass.isEmpty {
                 Text(boardingPass)
                     .font(NoorFont.body)
-                    .foregroundStyle(Color.noorRoseGold)
+                    .foregroundStyle(Color.noorAccent)
                     .italic()
                     .multilineTextAlignment(.center)
                     .padding(.vertical, 8)
@@ -468,7 +468,9 @@ struct CreateGoalView: View {
                 )
 
                 let goalID = goal.id.uuidString
+                let startDate = Calendar.current.startOfDay(for: Date())
                 for (index, challenge) in generatedChallenges.enumerated() {
+                    let challengeDueDate = Calendar.current.date(byAdding: .day, value: index + 1, to: startDate)
                     let task = DailyTask(
                         goalID: goalID,
                         title: challenge.title,
@@ -476,6 +478,7 @@ struct CreateGoalView: View {
                         estimatedTime: challenge.estimatedTime,
                         order: index,
                         isUnlocked: index == 0,
+                        dueDate: challengeDueDate,
                         goal: goal
                     )
                     goal.dailyTasks.append(task)

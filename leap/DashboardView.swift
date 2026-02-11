@@ -23,11 +23,18 @@ struct DashboardView: View {
     @State private var showDailyFlame = false
     @State private var globalStreak: Int = 0
     @State private var visionItems: [VisionItem] = []
+    @State private var selectedGoal: Goal?
+    @State private var scrollProxy: ScrollViewProxy?
+    @State private var goalToDelete: Goal?
+    @State private var showDeleteConfirmation = false
+    @State private var goalToEdit: Goal?
     private let calendar = Calendar.current
 
     private var guestPassCount: Int {
-        let c = UserDefaults.standard.integer(forKey: StorageKey.guestPassCount)
-        return c > 0 ? c : 5
+        // 1 guest pass per year for pro users
+        let lastGiftedYear = UserDefaults.standard.integer(forKey: "lastGuestPassGiftYear")
+        let currentYear = Calendar.current.component(.year, from: Date())
+        return lastGiftedYear < currentYear ? 1 : 0
     }
 
     private var userName: String {
@@ -70,19 +77,23 @@ struct DashboardView: View {
                             .padding(.horizontal)
                     }
                 } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 18) {
-                            greetingSection
-                            streakSection
-                            fromYourVisionSection
-                            if goals.isEmpty {
-                                emptyState
-                            } else {
-                                activeJourneysSection
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 18) {
+                                greetingSection
+                                streakSection
+                                fromYourVisionSection
+                                if goals.isEmpty {
+                                    emptyState
+                                } else {
+                                    activeJourneysSection
+                                        .id("dreamsSection")
+                                }
                             }
+                            .padding(20)
+                            .padding(.bottom, 100)
                         }
-                        .padding(20)
-                        .padding(.bottom, 100)
+                        .onAppear { scrollProxy = proxy }
                     }
                 }
 
@@ -127,9 +138,9 @@ struct DashboardView: View {
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 6) {
                         Image(systemName: "sparkle")
-                            .foregroundStyle(Color.noorRoseGold)
+                            .foregroundStyle(.white)
                         Text("Noor")
-                            .font(.system(size: 20, weight: .bold, design: .serif))
+                            .font(.system(size: 24, weight: .regular, design: .serif))
                             .foregroundStyle(.white)
                     }
                 }
@@ -166,9 +177,20 @@ struct DashboardView: View {
                         Button {
                             showProfile = true
                         } label: {
-                            Image(systemName: "person.circle")
-                                .font(.system(size: 22))
-                                .foregroundStyle(Color.noorTextSecondary)
+                            ZStack {
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.noorViolet, Color.noorAccent],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .frame(width: 28, height: 28)
+                                Text(String(userName.prefix(1)).uppercased())
+                                    .font(.system(size: 12, weight: .bold, design: .serif))
+                                    .foregroundStyle(.white)
+                            }
                         }
                         .buttonStyle(.plain)
                     }
@@ -183,11 +205,8 @@ struct DashboardView: View {
                     onDismiss: { showGoldenTicketSheet = false },
                     onGift: {
                         showGoldenTicketSheet = false
-                        let count = UserDefaults.standard.integer(forKey: StorageKey.guestPassCount)
-                        let current = count > 0 ? count : 5
-                        if current > 0 {
-                            UserDefaults.standard.set(current - 1, forKey: StorageKey.guestPassCount)
-                        }
+                        let currentYear = Calendar.current.component(.year, from: Date())
+                        UserDefaults.standard.set(currentYear, forKey: "lastGuestPassGiftYear")
                     }
                 )
             }
@@ -235,6 +254,37 @@ struct DashboardView: View {
                     proGateMessage: "Unlock unlimited flights with Pro"
                 )
             }
+            .navigationDestination(item: $selectedGoal) { goal in
+                DailyCheckInView(goal: goal)
+            }
+            .alert("Delete this dream?", isPresented: $showDeleteConfirmation) {
+                Button("Cancel", role: .cancel) {
+                    goalToDelete = nil
+                }
+                Button("Delete Forever", role: .destructive) {
+                    if let goal = goalToDelete {
+                        deleteDream(goal)
+                    }
+                }
+            } message: {
+                Text("This will permanently remove this dream and all its challenges. This cannot be undone.")
+            }
+            .sheet(item: $goalToEdit, onDismiss: { loadGoals() }) { goal in
+                EditDreamSheet(goal: goal)
+                    .environment(dataManager)
+            }
+        }
+    }
+
+    private func deleteDream(_ goal: Goal) {
+        Task { @MainActor in
+            do {
+                try await dataManager.deleteGoal(goal.id.uuidString)
+                goalToDelete = nil
+                loadGoals()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -257,52 +307,73 @@ struct DashboardView: View {
         return formatter.string(from: Date())
     }
 
-    // MARK: - Streak Section (with clear explanation of what a streak is)
+    // MARK: - Streak & Flights Section
     private var streakSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 16) {
-                HStack(spacing: 8) {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 24))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [Color.noorOrange, Color.noorAccent],
-                                startPoint: .top,
-                                endPoint: .bottom
+        HStack(spacing: 12) {
+            // Streak cell — taps into streak breakdown
+            Button {
+                showStreakSheet = true
+            } label: {
+                VStack(spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [Color.noorOrange, Color.noorAccent],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
                             )
-                        )
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(globalStreak) day streak")
-                            .font(NoorFont.title2)
+                        Text("\(globalStreak)")
+                            .font(NoorFont.largeTitle)
                             .foregroundStyle(.white)
-
-                        Text(globalStreak > 0 ? "Keep it going!" : "Start your streak today")
-                            .font(NoorFont.caption)
-                            .foregroundStyle(Color.noorTextSecondary)
                     }
-                }
 
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(goals.count)")
-                        .font(NoorFont.title)
-                        .foregroundStyle(Color.noorRoseGold)
-
-                    Text("Active \(goals.count == 1 ? "flight" : "flights")")
+                    Text("Day Streak")
                         .font(NoorFont.caption)
                         .foregroundStyle(Color.noorTextSecondary)
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 20))
             }
+            .buttonStyle(.plain)
 
-            Text("Your streak is how many days in a row you've taken a step—completed a habit or a journey step.")
-                .font(NoorFont.caption)
-                .foregroundStyle(Color.noorTextSecondary.opacity(0.9))
+            // Active flights cell — taps into goal / dreams
+            Button {
+                if goals.count == 1, let goal = goals.first {
+                    selectedGoal = goal
+                } else if !goals.isEmpty {
+                    withAnimation {
+                        scrollProxy?.scrollTo("dreamsSection", anchor: .top)
+                    }
+                }
+            } label: {
+                VStack(spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "airplane.departure")
+                            .font(.system(size: 20))
+                            .foregroundStyle(Color.noorRoseGold)
+
+                        Text("\(goals.count)")
+                            .font(NoorFont.largeTitle)
+                            .foregroundStyle(.white)
+                    }
+
+                    Text("Active \(goals.count == 1 ? "Flight" : "Flights")")
+                        .font(NoorFont.caption)
+                        .foregroundStyle(Color.noorTextSecondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+            }
+            .buttonStyle(.plain)
         }
-        .padding(20)
-        .background(Color.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 
     // MARK: - From your vision (today's one thing to act on)
@@ -371,6 +442,16 @@ struct DashboardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 24))
     }
 
+    // Goals sorted: incomplete (least progress first), then completed at bottom
+    private var sortedGoals: [Goal] {
+        goals.sorted { a, b in
+            let aComplete = a.isComplete
+            let bComplete = b.isComplete
+            if aComplete != bComplete { return !aComplete }
+            return a.progress < b.progress
+        }
+    }
+
     // MARK: - Active Journeys
     private var activeJourneysSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -378,11 +459,19 @@ struct DashboardView: View {
                 .font(NoorFont.largeTitle)
                 .foregroundStyle(.white)
 
-            ForEach(goals, id: \.id) { goal in
-                NavigationLink(destination: DailyCheckInView(goal: goal)) {
-                    JourneyCard(goal: goal)
+            ForEach(sortedGoals, id: \.id) { goal in
+                SwipeActionCard(
+                    onEdit: { goalToEdit = goal },
+                    onDelete: {
+                        goalToDelete = goal
+                        showDeleteConfirmation = true
+                    }
+                ) {
+                    NavigationLink(destination: DailyCheckInView(goal: goal)) {
+                        JourneyCard(goal: goal)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
     }
@@ -496,6 +585,10 @@ struct JourneyCard: View {
             .first { $0.isUnlocked && !$0.isCompleted }
     }
 
+    private var remainingChallenges: Int {
+        goal.dailyTasks.filter { !$0.isCompleted }.count
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Header
@@ -526,13 +619,22 @@ struct JourneyCard: View {
 
                     Circle()
                         .trim(from: 0, to: progress / 100)
-                        .stroke(Color.noorRoseGold, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        .stroke(
+                            progress >= 100 ? Color.noorSuccess : Color.noorRoseGold,
+                            style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                        )
                         .frame(width: 44, height: 44)
                         .rotationEffect(.degrees(-90))
 
-                    Text("\(Int(progress))%")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
+                    if progress >= 100 {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Color.noorSuccess)
+                    } else {
+                        Text("\(Int(progress))%")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
                 }
             }
 
@@ -543,7 +645,7 @@ struct JourneyCard: View {
                         .foregroundStyle(Color.noorAccent)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Today")
+                        Text("Today's Mission")
                             .font(NoorFont.caption)
                             .foregroundStyle(Color.noorTextSecondary)
 
@@ -575,13 +677,13 @@ struct JourneyCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             }
 
-            // Streak
+            // Remaining challenges
             HStack(spacing: 6) {
-                Image(systemName: "flame.fill")
+                Image(systemName: "list.bullet.rectangle.portrait")
                     .font(.system(size: 14))
-                    .foregroundStyle(Color.noorOrange)
+                    .foregroundStyle(Color.noorAccent)
 
-                Text("\(goal.currentStreak) day streak")
+                Text("\(remainingChallenges) of \(goal.dailyTasks.count) challenges left")
                     .font(NoorFont.caption)
                     .foregroundStyle(Color.noorTextSecondary)
             }
@@ -597,8 +699,9 @@ struct JourneyCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay(
             RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.noorViolet.opacity(0.3), lineWidth: 1)
+                .stroke(progress >= 100 ? Color.noorSuccess.opacity(0.4) : Color.noorViolet.opacity(0.3), lineWidth: 1)
         )
+        .opacity(progress >= 100 ? 0.65 : 1.0)
     }
 
     private func iconForCategory(_ category: String) -> String {
@@ -615,6 +718,247 @@ struct JourneyCard: View {
         case "travel": return "airplane"
         case "career": return "briefcase.fill"
         default: return "target"
+        }
+    }
+}
+
+// MARK: - Swipe Action Card
+private struct SwipeActionCard<Content: View>: View {
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @ViewBuilder let content: Content
+
+    @State private var offset: CGFloat = 0
+    @State private var showingAction: SwipeDirection = .none
+
+    private enum SwipeDirection { case none, left, right }
+    private let actionWidth: CGFloat = 80
+
+    var body: some View {
+        ZStack {
+            // Background actions
+            HStack(spacing: 0) {
+                // Edit (revealed on swipe right)
+                Button {
+                    withAnimation(.spring(response: 0.3)) { offset = 0; showingAction = .none }
+                    onEdit()
+                } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 20))
+                        Text("Edit")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: actionWidth)
+                    .frame(maxHeight: .infinity)
+                    .background(Color.noorViolet)
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                // Delete (revealed on swipe left)
+                Button {
+                    withAnimation(.spring(response: 0.3)) { offset = 0; showingAction = .none }
+                    onDelete()
+                } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 20))
+                        Text("Delete")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: actionWidth)
+                    .frame(maxHeight: .infinity)
+                    .background(Color.red)
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Main content
+            content
+                .offset(x: offset)
+                .gesture(
+                    DragGesture(minimumDistance: 20)
+                        .onChanged { value in
+                            let translation = value.translation.width
+                            if showingAction == .none {
+                                offset = translation * 0.6
+                            } else if showingAction == .right {
+                                offset = actionWidth + translation * 0.6
+                            } else {
+                                offset = -actionWidth + translation * 0.6
+                            }
+                        }
+                        .onEnded { value in
+                            withAnimation(.spring(response: 0.3)) {
+                                if value.translation.width > 60 {
+                                    offset = actionWidth
+                                    showingAction = .right
+                                } else if value.translation.width < -60 {
+                                    offset = -actionWidth
+                                    showingAction = .left
+                                } else {
+                                    offset = 0
+                                    showingAction = .none
+                                }
+                            }
+                        }
+                )
+        }
+        .clipped()
+    }
+}
+
+// MARK: - Edit Dream Sheet
+private struct EditDreamSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(DataManager.self) private var dataManager
+
+    let goal: Goal
+    @State private var destination: String = ""
+    @State private var timeline: String = ""
+    @State private var userStory: String = ""
+    @State private var selectedCategory: GoalCategory?
+    @State private var isSaving = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    // Category
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Category")
+                            .font(NoorFont.caption)
+                            .foregroundStyle(Color.noorTextSecondary)
+
+                        HStack(spacing: 10) {
+                            ForEach(GoalCategory.allCases) { cat in
+                                Button {
+                                    selectedCategory = cat
+                                } label: {
+                                    VStack(spacing: 6) {
+                                        Image(systemName: cat.icon)
+                                            .font(.system(size: 20))
+                                        Text(cat.displayName)
+                                            .font(.system(size: 10))
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(selectedCategory == cat ? Color.noorAccent.opacity(0.3) : Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(selectedCategory == cat ? Color.noorAccent : Color.clear, lineWidth: 1.5)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(selectedCategory == cat ? Color.noorAccent : Color.noorTextSecondary)
+                            }
+                        }
+                    }
+
+                    // Destination
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Destination")
+                            .font(NoorFont.caption)
+                            .foregroundStyle(Color.noorTextSecondary)
+
+                        TextField("Your goal", text: $destination)
+                            .font(NoorFont.body)
+                            .foregroundStyle(.white)
+                            .padding(16)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+
+                    // Timeline
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("When are you arriving?")
+                            .font(NoorFont.caption)
+                            .foregroundStyle(Color.noorTextSecondary)
+
+                        TextField("June 2026", text: $timeline)
+                            .font(NoorFont.body)
+                            .foregroundStyle(.white)
+                            .padding(16)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+
+                    // User story
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Why does this matter to you?")
+                            .font(NoorFont.caption)
+                            .foregroundStyle(Color.noorTextSecondary)
+
+                        TextEditor(text: $userStory)
+                            .font(NoorFont.body)
+                            .foregroundStyle(.white)
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 100)
+                            .padding(12)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+
+                    // Save button
+                    Button {
+                        save()
+                    } label: {
+                        Text(isSaving ? "Saving..." : "Save Changes")
+                            .font(NoorFont.button)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(Color.noorAccent)
+                            .clipShape(RoundedRectangle(cornerRadius: 20))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSaving)
+                    .padding(.top, 8)
+                }
+                .padding(20)
+            }
+            .background(Color.noorBackground)
+            .navigationTitle("Edit Dream")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(Color.noorTextSecondary)
+                }
+            }
+        }
+        .onAppear {
+            destination = goal.destination
+            timeline = goal.timeline
+            userStory = goal.userStory
+            selectedCategory = GoalCategory(rawValue: goal.category)
+        }
+    }
+
+    private func save() {
+        isSaving = true
+        goal.destination = destination
+        goal.timeline = timeline
+        goal.userStory = userStory
+        if let cat = selectedCategory {
+            goal.category = cat.rawValue
+        }
+        Task { @MainActor in
+            do {
+                try await dataManager.saveContext()
+            } catch {
+                print("Failed to save dream edits: \(error)")
+            }
+            isSaving = false
+            dismiss()
         }
     }
 }

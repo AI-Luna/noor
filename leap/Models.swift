@@ -99,6 +99,7 @@ final class DailyTask {
     var createdAt: Date
     var order: Int // 0-6 for sequential unlocking
     var isUnlocked: Bool // Sequential unlocking
+    var dueDate: Date? // When this challenge should be completed by
     var goal: Goal?
 
     // Computed properties
@@ -120,6 +121,7 @@ final class DailyTask {
         createdAt: Date = .now,
         order: Int,
         isUnlocked: Bool = false,
+        dueDate: Date? = nil,
         goal: Goal? = nil
     ) {
         self.id = id
@@ -131,6 +133,7 @@ final class DailyTask {
         self.createdAt = createdAt
         self.order = order
         self.isUnlocked = isUnlocked
+        self.dueDate = dueDate
         self.goal = goal
     }
 }

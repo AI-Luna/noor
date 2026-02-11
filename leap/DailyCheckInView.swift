@@ -23,6 +23,9 @@ struct DailyCheckInView: View {
     @State private var showConfetti = false
     @State private var showStreakCelebration = false
     @State private var streakCelebrationCount = 0
+    @State private var showDueDatePicker = false
+    @State private var editingTask: DailyTask?
+    @State private var editingDueDate: Date = Date()
 
     private var displayGoal: Goal { goalRefreshed ?? goal }
     private let calendar = Calendar.current
@@ -60,8 +63,8 @@ struct DailyCheckInView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     headerSection
-                    progressSection
                     currentChallengeSection
+                    progressSection
                     upcomingSection
                     completedSection
                 }
@@ -81,6 +84,9 @@ struct DailyCheckInView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .onAppear {
             loadStreak()
+        }
+        .sheet(isPresented: $showDueDatePicker) {
+            dueDatePickerSheet
         }
         .overlay {
             if showStreakCelebration {
@@ -169,11 +175,7 @@ struct DailyCheckInView: View {
                 Circle()
                     .trim(from: 0, to: progress / 100)
                     .stroke(
-                        LinearGradient(
-                            colors: [Color.noorViolet, Color.noorAccent],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
+                        Color.noorAccent,
                         style: StrokeStyle(lineWidth: 8, lineCap: .round)
                     )
                     .frame(width: 100, height: 100)
@@ -210,7 +212,7 @@ struct DailyCheckInView: View {
                     .font(NoorFont.title2)
                     .foregroundStyle(.white)
 
-                // Challenge card
+                // Challenge card — full width
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(alignment: .top, spacing: 16) {
                         // Checkbox
@@ -234,16 +236,34 @@ struct DailyCheckInView: View {
                                 .font(NoorFont.body)
                                 .foregroundStyle(Color.noorCharcoal.opacity(0.8))
 
-                            HStack(spacing: 4) {
-                                Image(systemName: "clock")
-                                    .font(.system(size: 12))
-                                Text(challenge.estimatedTime)
-                                    .font(NoorFont.caption)
+                            HStack(spacing: 12) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "clock")
+                                        .font(.system(size: 12))
+                                    Text(challenge.estimatedTime)
+                                        .font(NoorFont.caption)
+                                }
+                                .foregroundStyle(Color.noorViolet)
+
+                                if let dueDate = challenge.dueDate {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "calendar")
+                                            .font(.system(size: 12))
+                                        Text("Due \(formatShortDate(dueDate))")
+                                            .font(NoorFont.caption)
+                                    }
+                                    .foregroundStyle(dueDateColor(dueDate))
+                                    .onTapGesture {
+                                        editingTask = challenge
+                                        editingDueDate = dueDate
+                                        showDueDatePicker = true
+                                    }
+                                }
                             }
-                            .foregroundStyle(Color.noorViolet)
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(20)
                 .background(Color.white)
                 .clipShape(RoundedRectangle(cornerRadius: 20))
@@ -292,9 +312,26 @@ struct DailyCheckInView: View {
                             .foregroundStyle(Color.noorTextSecondary.opacity(0.4))
                             .frame(width: 24)
 
-                        Text(challenge.title)
-                            .font(NoorFont.body)
-                            .foregroundStyle(Color.noorTextSecondary.opacity(0.5))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(challenge.title)
+                                .font(NoorFont.body)
+                                .foregroundStyle(Color.noorTextSecondary.opacity(0.5))
+
+                            if let dueDate = challenge.dueDate {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "calendar")
+                                        .font(.system(size: 10))
+                                    Text("Due \(formatShortDate(dueDate))")
+                                        .font(NoorFont.caption)
+                                }
+                                .foregroundStyle(Color.noorTextSecondary.opacity(0.4))
+                                .onTapGesture {
+                                    editingTask = challenge
+                                    editingDueDate = dueDate
+                                    showDueDatePicker = true
+                                }
+                            }
+                        }
 
                         Spacer()
                     }
@@ -331,10 +368,17 @@ struct DailyCheckInView: View {
                                 .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
                                 .strikethrough()
 
-                            if let completedAt = challenge.completedAt {
-                                Text(formatDate(completedAt))
-                                    .font(NoorFont.caption)
-                                    .foregroundStyle(Color.noorTextSecondary.opacity(0.4))
+                            HStack(spacing: 12) {
+                                if let completedAt = challenge.completedAt {
+                                    Text("Completed \(formatDate(completedAt))")
+                                        .font(NoorFont.caption)
+                                        .foregroundStyle(Color.noorTextSecondary.opacity(0.4))
+                                }
+                                if let dueDate = challenge.dueDate {
+                                    Text("Due \(formatShortDate(dueDate))")
+                                        .font(NoorFont.caption)
+                                        .foregroundStyle(Color.noorTextSecondary.opacity(0.3))
+                                }
                             }
                         }
 
@@ -420,6 +464,81 @@ struct DailyCheckInView: View {
             .clipShape(RoundedRectangle(cornerRadius: 24))
             .shadow(color: .black.opacity(0.3), radius: 30, x: 0, y: 15)
         }
+    }
+
+    // MARK: - Due Date Picker Sheet
+    private var dueDatePickerSheet: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                if let task = editingTask {
+                    Text(task.title)
+                        .font(NoorFont.title2)
+                        .foregroundStyle(.white)
+                }
+
+                DatePicker(
+                    "Due Date",
+                    selection: $editingDueDate,
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.graphical)
+                .tint(Color.noorAccent)
+                .colorScheme(.dark)
+
+                Button {
+                    if let task = editingTask {
+                        task.dueDate = editingDueDate
+                        if let updated = goalRefreshed ?? goal as Goal? {
+                            goalRefreshed = nil
+                            Task { @MainActor in
+                                if let g = await dataManager.getGoalByID(updated.id.uuidString) {
+                                    goalRefreshed = g
+                                }
+                            }
+                        }
+                    }
+                    showDueDatePicker = false
+                } label: {
+                    Text("Save")
+                        .font(NoorFont.button)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(Color.noorAccent)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(20)
+            .background(Color.noorBackground)
+            .navigationTitle("Change Due Date")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showDueDatePicker = false }
+                        .foregroundStyle(Color.noorTextSecondary)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func formatShortDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: date)
+    }
+
+    private func dueDateColor(_ date: Date) -> Color {
+        let today = Calendar.current.startOfDay(for: Date())
+        let due = Calendar.current.startOfDay(for: date)
+        if due < today {
+            return Color.noorCoral // Overdue
+        } else if due == today {
+            return Color.noorOrange // Due today
+        }
+        return Color.noorViolet // Future
     }
 
     // MARK: - Actions

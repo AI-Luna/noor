@@ -25,15 +25,15 @@ struct ContentView: View {
                 TabView {
                     DashboardView()
                         .tabItem {
-                            Label("Home", systemImage: "house.fill")
+                            Label("Home", systemImage: "airplane")
                         }
                     ProgressTabView()
                         .tabItem {
-                            Label("Progress", systemImage: "chart.line.uptrend.xyaxis")
+                            Label("Progress", systemImage: "flame.fill")
                         }
                     VisionView()
                         .tabItem {
-                            Label("Vision", systemImage: "photo.on.rectangle.angled")
+                            Label("Vision", systemImage: "eye.fill")
                         }
                     MicrohabitsView()
                         .tabItem {
@@ -89,7 +89,9 @@ struct ContentView: View {
         )
 
         // Create tasks from challenges
+        let startDate = Calendar.current.startOfDay(for: Date())
         for (index, challengeData) in challengesData.enumerated() {
+            let challengeDueDate = Calendar.current.date(byAdding: .day, value: index + 1, to: startDate)
             let task = DailyTask(
                 goalID: goal.id.uuidString,
                 title: challengeData["title"] as? String ?? "Challenge \(index + 1)",
@@ -97,6 +99,7 @@ struct ContentView: View {
                 estimatedTime: challengeData["estimatedTime"] as? String ?? "10 min",
                 order: index,
                 isUnlocked: index == 0, // Only first task unlocked
+                dueDate: challengeDueDate,
                 goal: goal
             )
             goal.dailyTasks.append(task)

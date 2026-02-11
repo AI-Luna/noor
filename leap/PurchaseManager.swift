@@ -13,7 +13,13 @@ import SwiftUI
 final class PurchaseManager {
     static let shared = PurchaseManager()
 
-    var isPro: Bool = false
+    /// Set to true to temporarily unlock all features (remove before release).
+    private static let bypassPaywall = true
+
+    private(set) var _isPro: Bool = false
+    var isPro: Bool {
+        Self.bypassPaywall || _isPro
+    }
     var currentOffering: Offering?
     var isLoading: Bool = false
     var errorMessage: String?
@@ -31,10 +37,10 @@ final class PurchaseManager {
     func checkProStatus() async {
         do {
             let customerInfo = try await Purchases.shared.customerInfo()
-            isPro = customerInfo.entitlements["pro"]?.isActive == true
+            _isPro = customerInfo.entitlements["pro"]?.isActive == true
         } catch {
             errorMessage = error.localizedDescription
-            isPro = false
+            _isPro = false
         }
     }
 
@@ -58,7 +64,7 @@ final class PurchaseManager {
             let result = try await Purchases.shared.purchase(package: package)
             if !result.userCancelled {
                 await checkProStatus()
-                return isPro
+                return _isPro || Self.bypassPaywall
             }
         } catch {
             errorMessage = error.localizedDescription

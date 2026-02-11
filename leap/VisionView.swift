@@ -16,6 +16,7 @@ struct VisionView: View {
     @State private var goals: [Goal] = []
     @State private var showAddSheet = false
     @State private var organizationMode: VisionOrganizationMode = .byType
+    @State private var itemForActions: VisionItem?  // tap cell → show Open/Delete
 
     enum VisionOrganizationMode: String, CaseIterable {
         case byType = "By type"
@@ -58,23 +59,25 @@ struct VisionView: View {
                 if items.isEmpty {
                     emptyState
                 } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 14) {
-                            Picker("Organize", selection: $organizationMode) {
-                                ForEach(VisionOrganizationMode.allCases, id: \.self) { m in
-                                    Text(m.rawValue).tag(m)
-                                }
+                    VStack(spacing: 0) {
+                        Text("See it, then act on it")
+                            .font(NoorFont.caption)
+                            .foregroundStyle(Color.noorTextSecondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.bottom, 8)
+
+                        Picker("Organize", selection: $organizationMode) {
+                            ForEach(VisionOrganizationMode.allCases, id: \.self) { m in
+                                Text(m.rawValue).tag(m)
                             }
-                            .pickerStyle(.segmented)
-                            .padding(.horizontal, 4)
+                        }
+                        .pickerStyle(.segmented)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
 
+                        List {
                             ForEach(groupedItems, id: \.0) { groupName, groupItems in
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Text(groupName)
-                                        .font(NoorFont.callout)
-                                        .foregroundStyle(Color.noorRoseGold)
-                                        .padding(.horizontal, 4)
-
+                                Section {
                                     ForEach(groupItems) { item in
                                         VisionItemCard(
                                             item: item,
@@ -82,13 +85,34 @@ struct VisionView: View {
                                             onOpen: { openItem(item) },
                                             onMap: item.kind == .destination ? { openInMaps(item) } : nil,
                                             onMarkDone: { toggleDone(item) },
-                                            onDelete: { deleteItem(item) }
+                                            onDelete: { deleteItem(item) },
+                                            onTap: { itemForActions = item }
                                         )
+                                        .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+                                        .listRowSeparator(.hidden)
+                                        .listRowBackground(Color.clear)
+                                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                            Button("Open") {
+                                                openItem(item)
+                                            }
+                                            .tint(Color.noorRoseGold)
+                                        }
+                                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                            Button("Delete", role: .destructive) {
+                                                deleteItem(item)
+                                            }
+                                        }
                                     }
+                                } header: {
+                                    Text(groupName)
+                                        .font(NoorFont.callout)
+                                        .foregroundStyle(Color.noorRoseGold)
+                                        .padding(.vertical, 4)
                                 }
                             }
                         }
-                        .padding(20)
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
                         .padding(.bottom, 100)
                     }
                 }
@@ -103,13 +127,16 @@ struct VisionView: View {
                             Image(systemName: "plus")
                                 .font(.system(size: 24, weight: .semibold))
                                 .foregroundStyle(.white)
-                                .frame(width: 56, height: 56)
-                                .background(Color.white.opacity(0.15))
-                                .clipShape(Circle())
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color.white.opacity(0.35), lineWidth: 1)
+                                .frame(width: 60, height: 60)
+                                .background(
+                                    LinearGradient(
+                                        colors: [Color.noorAccent, Color.noorViolet],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
                                 )
+                                .clipShape(Circle())
+                                .shadow(color: Color.noorAccent.opacity(0.4), radius: 12, x: 0, y: 6)
                         }
                         .buttonStyle(.plain)
                         .padding(.trailing, 20)
@@ -121,15 +148,30 @@ struct VisionView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    VStack(spacing: 2) {
-                        Text("Vision")
-                            .font(.system(size: 20, weight: .bold, design: .serif))
-                            .foregroundStyle(.white)
-                        Text("See it, then act on it")
-                            .font(NoorFont.caption)
-                            .foregroundStyle(Color.noorTextSecondary)
+                    Text("Vision")
+                        .font(.system(size: 24, weight: .bold, design: .serif))
+                        .foregroundStyle(.white)
+                }
+            }
+            .confirmationDialog("Vision item", isPresented: Binding(
+                get: { itemForActions != nil },
+                set: { if !$0 { itemForActions = nil } }
+            )) {
+                if let item = itemForActions {
+                    Button("Open") {
+                        openItem(item)
+                        itemForActions = nil
+                    }
+                    Button("Delete", role: .destructive) {
+                        deleteItem(item)
+                        itemForActions = nil
                     }
                 }
+                Button("Cancel", role: .cancel) {
+                    itemForActions = nil
+                }
+            } message: {
+                Text("Open or delete this item?")
             }
             .onAppear {
                 loadItems()
@@ -142,7 +184,7 @@ struct VisionView: View {
                 loadGoals()
             }) {
                 AddVisionItemSheet(goals: goals, onDismiss: { showAddSheet = false }, onSaved: { showAddSheet = false })
-                    .presentationDetents([.fraction(0.96), .large])
+                    .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
         }
@@ -176,37 +218,37 @@ struct VisionView: View {
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
 
-                Text("Vision is the heart of Noor. Add inspiration—Pinterest, Instagram, places you want to go—and actions that close the gap. Then come back here to act on it.")
-                    .font(NoorFont.body)
-                    .foregroundStyle(Color.noorTextSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 28)
+                VStack(spacing: 8) {
+                    Text("Vision is the heart of Noor.")
+                        .font(NoorFont.body)
+                        .foregroundStyle(Color.noorTextSecondary)
+                        .multilineTextAlignment(.center)
+                    Text("Add inspiration, Pinterest, Instagram, places you want to go, and actions that close the gap. Then come back here to act on it.")
+                        .font(NoorFont.body)
+                        .foregroundStyle(Color.noorTextSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 28)
             }
 
             Button {
                 showAddSheet = true
             } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 20))
-                    Text("Add to your vision")
-                        .font(NoorFont.button)
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 56)
-                .background(
-                    LinearGradient(
-                        colors: [Color.noorViolet.opacity(0.8), Color.noorAccent.opacity(0.7)],
-                        startPoint: .leading,
-                        endPoint: .trailing
+                Text("Create your vision")
+                    .font(NoorFont.button)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.noorRoseGold, Color.noorOrange],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
                     )
-                )
-                .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
-                .overlay(
-                    RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge)
-                        .stroke(Color.noorRoseGold.opacity(0.4), lineWidth: 1)
-                )
+                    .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
+                    .shadow(color: Color.noorRoseGold.opacity(0.5), radius: 16, x: 0, y: 0)
+                    .shadow(color: Color.noorOrange.opacity(0.3), radius: 24, x: 0, y: 4)
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 32)
@@ -280,7 +322,7 @@ struct VisionView: View {
     }
 }
 
-// MARK: - Card for one vision item (with accountability: mark done, link to journey)
+// MARK: - Card for one vision item (mark done, open; delete via swipe or tap)
 private struct VisionItemCard: View {
     let item: VisionItem
     let linkedGoalTitle: String?
@@ -288,6 +330,7 @@ private struct VisionItemCard: View {
     let onMap: (() -> Void)?
     let onMarkDone: () -> Void
     let onDelete: () -> Void
+    var onTap: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 16) {
@@ -326,6 +369,11 @@ private struct VisionItemCard: View {
                         .lineLimit(1)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onTap?()
+            }
 
             Spacer()
 
@@ -360,13 +408,6 @@ private struct VisionItemCard: View {
                     }
                     .buttonStyle(.plain)
                 }
-
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color.noorTextSecondary.opacity(0.8))
-                }
-                .buttonStyle(.plain)
             }
         }
         .padding(16)
@@ -467,15 +508,13 @@ private struct AddVisionItemSheet: View {
                     VStack(alignment: .leading, spacing: 0) {
                         // Hero + mission
                         VStack(alignment: .leading, spacing: 12) {
-                            HStack(spacing: 10) {
-                                Image(systemName: "sparkles")
-                                    .font(.system(size: 24))
-                                    .foregroundStyle(Color.noorRoseGold)
-                                Text("Add to your vision")
-                                    .font(NoorFont.largeTitle)
-                                    .foregroundStyle(.white)
-                            }
-                            Text("Noor combines mindset with micro actions. Your vision holds the dream; habits and journey steps are your daily moves.")
+                            Text("Create your vision")
+                                .font(NoorFont.largeTitle)
+                                .foregroundStyle(.white)
+                            Text("Vision is the heart of Noor.")
+                                .font(NoorFont.body)
+                                .foregroundStyle(Color.noorTextSecondary)
+                            Text("Add inspiration, Pinterest, Instagram, places you want to go, and actions that close the gap. Then come back here to act on it.")
                                 .font(NoorFont.body)
                                 .foregroundStyle(Color.noorTextSecondary)
                         }
@@ -551,7 +590,7 @@ private struct AddVisionItemSheet: View {
                                     .autocapitalization(.none)
                                     .keyboardType(.URL)
 
-                                TextField("Name (optional) — e.g. @handle or post description", text: $title)
+                                TextField("Name (optional), e.g. @handle or post description", text: $title)
                                     .textFieldStyle(.plain)
                                     .font(NoorFont.body)
                                     .foregroundStyle(.white)
