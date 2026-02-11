@@ -20,6 +20,7 @@ struct DashboardView: View {
     @State private var showProfile = false
     @State private var showStreakSheet = false
     @State private var showGoldenTicketSheet = false
+    @State private var showDailyFlame = false
     @State private var globalStreak: Int = 0
     @State private var visionItems: [VisionItem] = []
     private let calendar = Calendar.current
@@ -70,7 +71,7 @@ struct DashboardView: View {
                     }
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 28) {
+                        VStack(alignment: .leading, spacing: 18) {
                             greetingSection
                             streakSection
                             fromYourVisionSection
@@ -174,7 +175,7 @@ struct DashboardView: View {
                 }
             }
             .sheet(isPresented: $showStreakSheet) {
-                StreakCalendarSheet(streakCount: globalStreak, onDismiss: { showStreakSheet = false })
+                StreakCalendarSheet(streakCount: globalStreak, goals: goals, onDismiss: { showStreakSheet = false })
             }
             .sheet(isPresented: $showGoldenTicketSheet) {
                 GoldenTicketSheet(
@@ -208,11 +209,22 @@ struct DashboardView: View {
                 loadGoals()
                 loadGlobalStreak()
                 loadVisionItems()
+                tryShowDailyFlame()
             }
             .refreshable {
                 loadGoals()
                 loadGlobalStreak()
                 loadVisionItems()
+            }
+            .fullScreenCover(isPresented: $showDailyFlame) {
+                DailyFlameView(
+                    streakCount: globalStreak,
+                    userName: userName,
+                    onDismiss: {
+                        recordDailyFlameShown()
+                        showDailyFlame = false
+                    }
+                )
             }
             .sheet(isPresented: $showCreateGoal, onDismiss: { loadGoals() }) {
                 CreateGoalView()
@@ -245,44 +257,48 @@ struct DashboardView: View {
         return formatter.string(from: Date())
     }
 
-    // MARK: - Streak Section
+    // MARK: - Streak Section (with clear explanation of what a streak is)
     private var streakSection: some View {
-        HStack(spacing: 16) {
-            // Streak display
-            HStack(spacing: 8) {
-                Image(systemName: "flame.fill")
-                    .font(.system(size: 24))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.noorOrange, Color.noorAccent],
-                            startPoint: .top,
-                            endPoint: .bottom
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 16) {
+                HStack(spacing: 8) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 24))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [Color.noorOrange, Color.noorAccent],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
                         )
-                    )
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(globalStreak) day streak")
-                        .font(NoorFont.title2)
-                        .foregroundStyle(.white)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(globalStreak) day streak")
+                            .font(NoorFont.title2)
+                            .foregroundStyle(.white)
 
-                    Text(globalStreak > 0 ? "Keep it going!" : "Start your streak today")
+                        Text(globalStreak > 0 ? "Keep it going!" : "Start your streak today")
+                            .font(NoorFont.caption)
+                            .foregroundStyle(Color.noorTextSecondary)
+                    }
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(goals.count)")
+                        .font(NoorFont.title)
+                        .foregroundStyle(Color.noorRoseGold)
+
+                    Text("Active \(goals.count == 1 ? "flight" : "flights")")
                         .font(NoorFont.caption)
                         .foregroundStyle(Color.noorTextSecondary)
                 }
             }
 
-            Spacer()
-
-            // Active journeys count
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(goals.count)")
-                    .font(NoorFont.title)
-                    .foregroundStyle(Color.noorRoseGold)
-
-                Text("Active \(goals.count == 1 ? "flight" : "flights")")
-                    .font(NoorFont.caption)
-                    .foregroundStyle(Color.noorTextSecondary)
-            }
+            Text("Your streak is how many days in a row you've taken a step—completed a habit or a journey step.")
+                .font(NoorFont.caption)
+                .foregroundStyle(Color.noorTextSecondary.opacity(0.9))
         }
         .padding(20)
         .background(Color.white.opacity(0.08))
@@ -357,9 +373,9 @@ struct DashboardView: View {
 
     // MARK: - Active Journeys
     private var activeJourneysSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("Your Dreams")
-                .font(NoorFont.title)
+                .font(NoorFont.largeTitle)
                 .foregroundStyle(.white)
 
             ForEach(goals, id: \.id) { goal in
@@ -388,6 +404,19 @@ struct DashboardView: View {
     private func loadGlobalStreak() {
         globalStreak = UserDefaults.standard.integer(forKey: StorageKey.streakCount)
     }
+
+    private func tryShowDailyFlame() {
+        guard globalStreak > 0 else { return }
+        let today = calendar.startOfDay(for: Date())
+        let lastShown = UserDefaults.standard.object(forKey: StorageKey.lastDailyFlameDate) as? Date
+        if lastShown == nil || !calendar.isDate(lastShown!, inSameDayAs: today) {
+            showDailyFlame = true
+        }
+    }
+
+    private func recordDailyFlameShown() {
+        UserDefaults.standard.set(Date(), forKey: StorageKey.lastDailyFlameDate)
+    }
 }
 
 // MARK: - From your vision (one card for Home)
@@ -401,13 +430,13 @@ private struct FromYourVisionBlock: View {
 
     var body: some View {
         if let item = firstUncompleted {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Image(systemName: "sparkles")
-                        .font(.system(size: 16))
+                        .font(.system(size: 18))
                         .foregroundStyle(Color.noorRoseGold)
                     Text("From your vision")
-                        .font(NoorFont.title2)
+                        .font(NoorFont.title)
                         .foregroundStyle(.white)
                 }
                 .padding(.horizontal, 4)

@@ -8,6 +8,7 @@
 
 import SwiftUI
 import MapKit
+import UIKit
 
 struct VisionView: View {
     @Environment(DataManager.self) private var dataManager
@@ -58,7 +59,7 @@ struct VisionView: View {
                     emptyState
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
+                        VStack(alignment: .leading, spacing: 14) {
                             sectionHeader
 
                             Picker("Organize", selection: $organizationMode) {
@@ -138,7 +139,7 @@ struct VisionView: View {
                 loadGoals()
             }) {
                 AddVisionItemSheet(goals: goals, onDismiss: { showAddSheet = false }, onSaved: { showAddSheet = false })
-                    .presentationDetents([.large, .fraction(0.92)])
+                    .presentationDetents([.fraction(0.96), .large])
                     .presentationDragIndicator(.visible)
             }
         }
@@ -155,9 +156,9 @@ struct VisionView: View {
     }
 
     private var sectionHeader: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             Text("Inspiration & action")
-                .font(NoorFont.title2)
+                .font(NoorFont.title)
                 .foregroundStyle(.white)
             Text("See it. Then act on it.")
                 .font(NoorFont.caption)
@@ -420,6 +421,7 @@ private struct AddVisionItemSheet: View {
     }
 
     private func save() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         let t = title.trimmingCharacters(in: .whitespaces)
         let u = url.trimmingCharacters(in: .whitespaces)
         let p = placeName.trimmingCharacters(in: .whitespaces)
@@ -472,41 +474,190 @@ private struct AddVisionItemSheet: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        // Hero: frame this as the main action
-                        VStack(alignment: .leading, spacing: 8) {
+                        // Hero + mission
+                        VStack(alignment: .leading, spacing: 12) {
                             HStack(spacing: 10) {
                                 Image(systemName: "sparkles")
-                                    .font(.system(size: 22))
+                                    .font(.system(size: 24))
                                     .foregroundStyle(Color.noorRoseGold)
                                 Text("Add to your vision")
                                     .font(NoorFont.largeTitle)
                                     .foregroundStyle(.white)
                             }
-                            Text("Inspiration, destinations, and actions that light your path.")
+                            Text("Noor combines mindset with micro actions. Your vision holds the dream; habits and journey steps are your daily moves.")
                                 .font(NoorFont.body)
                                 .foregroundStyle(Color.noorTextSecondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.bottom, 28)
+                        .padding(.bottom, 32)
 
-                        // Section: What are you adding?
-                        VStack(alignment: .leading, spacing: 12) {
+                        // Section: What are you adding? — 4 cells with icons
+                        VStack(alignment: .leading, spacing: 16) {
                             Text("What are you adding?")
                                 .font(NoorFont.title2)
                                 .foregroundStyle(.white)
 
-                            Picker("Type", selection: $kind) {
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
                                 ForEach(VisionItemKind.allCases, id: \.self) { k in
-                                    Text(k.displayName).tag(k)
+                                    VisionKindCell(
+                                        kind: k,
+                                        isSelected: kind == k
+                                    ) {
+                                        kind = k
+                                    }
                                 }
                             }
-                            .pickerStyle(.segmented)
                         }
-                        .padding(.bottom, 24)
+                        .padding(.bottom, 28)
+
+                        Text("Details")
+                            .font(NoorFont.title2)
+                            .foregroundStyle(.white)
+                            .padding(.bottom, 16)
+
+                        if kind == .pinterest {
+                            VStack(alignment: .leading, spacing: 14) {
+                                Text("Pinterest board or profile URL")
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                                TextField("https://pin.it/... or pinterest.com/...", text: $url)
+                                    .textFieldStyle(.plain)
+                                    .font(NoorFont.body)
+                                    .foregroundStyle(.white)
+                                    .padding(16)
+                                    .background(Color.white.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                                    .autocapitalization(.none)
+                                    .keyboardType(.URL)
+
+                                TextField("Name (optional)", text: $title)
+                                    .textFieldStyle(.plain)
+                                    .font(NoorFont.body)
+                                    .foregroundStyle(.white)
+                                    .padding(16)
+                                    .background(Color.white.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+
+                                Text("Paste a Pinterest link (board, profile, or pin.it). We'll open it when you tap Open.")
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                            }
+                            .padding(.bottom, 8)
+                        }
+
+                        if kind == .instagram {
+                            VStack(alignment: .leading, spacing: 14) {
+                                Text("Instagram post or profile URL")
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                                TextField("https://instagram.com/p/... or /username", text: $url)
+                                    .textFieldStyle(.plain)
+                                    .font(NoorFont.body)
+                                    .foregroundStyle(.white)
+                                    .padding(16)
+                                    .background(Color.white.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                                    .autocapitalization(.none)
+                                    .keyboardType(.URL)
+
+                                TextField("Name (optional) — e.g. @handle or post description", text: $title)
+                                    .textFieldStyle(.plain)
+                                    .font(NoorFont.body)
+                                    .foregroundStyle(.white)
+                                    .padding(16)
+                                    .background(Color.white.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+
+                                Text("Paste a post link (Share → Copy link) or an influencer's profile. Tap Open to revisit for inspiration.")
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                            }
+                            .padding(.bottom, 8)
+                        }
+
+                        if kind == .destination {
+                            VStack(alignment: .leading, spacing: 14) {
+                                Text("Place you want to go")
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                                TextField("e.g. Iceland, Tokyo, Bali", text: $placeName)
+                                    .textFieldStyle(.plain)
+                                    .font(NoorFont.body)
+                                    .foregroundStyle(.white)
+                                    .padding(16)
+                                    .background(Color.white.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+
+                                TextField("Label (optional)", text: $title)
+                                    .textFieldStyle(.plain)
+                                    .font(NoorFont.body)
+                                    .foregroundStyle(.white)
+                                    .padding(16)
+                                    .background(Color.white.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+
+                                Text("Tap \"Flights\" to search flights to this place.")
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                            }
+                            .padding(.bottom, 8)
+                        }
+
+                        if kind == .action {
+                            VStack(alignment: .leading, spacing: 14) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Choose an idea (optional)")
+                                        .font(NoorFont.caption)
+                                        .foregroundStyle(Color.noorTextSecondary)
+                                    Picker("Idea", selection: $actionSuggestion) {
+                                        ForEach(VisionActionSuggestion.allCases, id: \.self) { s in
+                                            Text(s.rawValue).tag(s)
+                                        }
+                                    }
+                                    .pickerStyle(.menu)
+                                    .tint(.white)
+                                    .onChange(of: actionSuggestion) { _, new in
+                                        if new != .other {
+                                            title = new.rawValue
+                                            if let u = new.urlPlaceholder { url = u }
+                                        }
+                                    }
+                                }
+
+                                Text("What action or link?")
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                                TextField("e.g. Update LinkedIn, Message Sarah", text: $title)
+                                    .textFieldStyle(.plain)
+                                    .font(NoorFont.body)
+                                    .foregroundStyle(.white)
+                                    .padding(16)
+                                    .background(Color.white.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+
+                                TextField("URL (LinkedIn, shop, etc.)", text: $url)
+                                    .textFieldStyle(.plain)
+                                    .font(NoorFont.body)
+                                    .foregroundStyle(.white)
+                                    .padding(16)
+                                    .background(Color.white.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                                    .autocapitalization(.none)
+                                    .keyboardType(.URL)
+
+                                Text("Save a link that moves you forward. We'll open it when you tap Open.")
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                            }
+                            .padding(.bottom, 8)
+                        }
 
                         if !goals.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 10) {
                                 Text("Link to journey (optional)")
+                                    .font(NoorFont.title2)
+                                    .foregroundStyle(.white)
+                                Text("Connect this to one of your visions or goals.")
                                     .font(NoorFont.caption)
                                     .foregroundStyle(Color.noorTextSecondary)
                                 Picker("Journey", selection: $selectedGoalID) {
@@ -519,137 +670,7 @@ private struct AddVisionItemSheet: View {
                                 .pickerStyle(.menu)
                                 .tint(.white)
                             }
-                            .padding(.bottom, 24)
-                        }
-
-                        Text("Details")
-                            .font(NoorFont.title2)
-                            .foregroundStyle(.white)
-                            .padding(.bottom, 12)
-
-                        if kind == .pinterest {
-                            Text("Pinterest board or profile URL")
-                                .font(NoorFont.caption)
-                                .foregroundStyle(Color.noorTextSecondary)
-                            TextField("https://pin.it/... or pinterest.com/...", text: $url)
-                                .textFieldStyle(.plain)
-                                .font(NoorFont.body)
-                                .foregroundStyle(.white)
-                                .padding(16)
-                                .background(Color.white.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-                                .autocapitalization(.none)
-                                .keyboardType(.URL)
-
-                            TextField("Name (optional)", text: $title)
-                                .textFieldStyle(.plain)
-                                .font(NoorFont.body)
-                                .foregroundStyle(.white)
-                                .padding(16)
-                                .background(Color.white.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-
-                            Text("Paste a Pinterest link (board, profile, or pin.it). We'll open it when you tap Open.")
-                                .font(NoorFont.caption)
-                                .foregroundStyle(Color.noorTextSecondary)
-                        }
-
-                        if kind == .instagram {
-                            Text("Instagram post or profile URL")
-                                .font(NoorFont.caption)
-                                .foregroundStyle(Color.noorTextSecondary)
-                            TextField("https://instagram.com/p/... or /username", text: $url)
-                                .textFieldStyle(.plain)
-                                .font(NoorFont.body)
-                                .foregroundStyle(.white)
-                                .padding(16)
-                                .background(Color.white.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-                                .autocapitalization(.none)
-                                .keyboardType(.URL)
-
-                            TextField("Name (optional) — e.g. @handle or post description", text: $title)
-                                .textFieldStyle(.plain)
-                                .font(NoorFont.body)
-                                .foregroundStyle(.white)
-                                .padding(16)
-                                .background(Color.white.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-
-                            Text("Paste a post link (Share → Copy link) or an influencer's profile. Tap Open to revisit for inspiration.")
-                                .font(NoorFont.caption)
-                                .foregroundStyle(Color.noorTextSecondary)
-                        }
-
-                        if kind == .destination {
-                            Text("Place you want to go")
-                                .font(NoorFont.caption)
-                                .foregroundStyle(Color.noorTextSecondary)
-                            TextField("e.g. Iceland, Tokyo, Bali", text: $placeName)
-                                .textFieldStyle(.plain)
-                                .font(NoorFont.body)
-                                .foregroundStyle(.white)
-                                .padding(16)
-                                .background(Color.white.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-
-                            TextField("Label (optional)", text: $title)
-                                .textFieldStyle(.plain)
-                                .font(NoorFont.body)
-                                .foregroundStyle(.white)
-                                .padding(16)
-                                .background(Color.white.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-
-                            Text("Tap \"Flights\" to search flights to this place.")
-                                .font(NoorFont.caption)
-                                .foregroundStyle(Color.noorTextSecondary)
-                        }
-
-                        if kind == .action {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Choose an idea (optional)")
-                                    .font(NoorFont.caption)
-                                    .foregroundStyle(Color.noorTextSecondary)
-                                Picker("Idea", selection: $actionSuggestion) {
-                                    ForEach(VisionActionSuggestion.allCases, id: \.self) { s in
-                                        Text(s.rawValue).tag(s)
-                                    }
-                                }
-                                .pickerStyle(.menu)
-                                .tint(.white)
-                                .onChange(of: actionSuggestion) { _, new in
-                                    if new != .other {
-                                        title = new.rawValue
-                                        if let u = new.urlPlaceholder { url = u }
-                                    }
-                                }
-                            }
-
-                            Text("What action or link?")
-                                .font(NoorFont.caption)
-                                .foregroundStyle(Color.noorTextSecondary)
-                            TextField("e.g. Update LinkedIn, Message Sarah", text: $title)
-                                .textFieldStyle(.plain)
-                                .font(NoorFont.body)
-                                .foregroundStyle(.white)
-                                .padding(16)
-                                .background(Color.white.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-
-                            TextField("URL (LinkedIn, shop, etc.)", text: $url)
-                                .textFieldStyle(.plain)
-                                .font(NoorFont.body)
-                                .foregroundStyle(.white)
-                                .padding(16)
-                                .background(Color.white.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-                                .autocapitalization(.none)
-                                .keyboardType(.URL)
-
-                            Text("Save a link that moves you forward. We'll open it when you tap Open.")
-                                .font(NoorFont.caption)
-                                .foregroundStyle(Color.noorTextSecondary)
+                            .padding(.bottom, 28)
                         }
 
                         // Primary CTA: Save feels like the main action
@@ -684,10 +705,10 @@ private struct AddVisionItemSheet: View {
                         }
                         .disabled(!canSave)
                         .buttonStyle(.plain)
-                        .padding(.top, 32)
-                        .padding(.bottom, 40)
+                        .padding(.top, 36)
+                        .padding(.bottom, 48)
                     }
-                    .padding(20)
+                    .padding(24)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -704,6 +725,43 @@ private struct AddVisionItemSheet: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Vision type cell (icon + label, selected state) — fixed size so all cells match
+private struct VisionKindCell: View {
+    let kind: VisionItemKind
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 12) {
+                Image(systemName: kind.icon)
+                    .font(.system(size: 32))
+                    .foregroundStyle(isSelected ? Color.noorRoseGold : Color.noorTextSecondary)
+                    .frame(width: 56, height: 56)
+                    .background(isSelected ? Color.noorRoseGold.opacity(0.2) : Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+
+                Text(kind.displayName)
+                    .font(NoorFont.caption)
+                    .foregroundStyle(isSelected ? .white : Color.noorTextSecondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, minHeight: 128)
+            .padding(.vertical, 20)
+            .padding(.horizontal, 12)
+            .background(isSelected ? Color.noorViolet.opacity(0.25) : Color.white.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(isSelected ? Color.noorRoseGold.opacity(0.6) : Color.white.opacity(0.1), lineWidth: isSelected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 

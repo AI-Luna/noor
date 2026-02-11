@@ -32,7 +32,7 @@ struct ProfileView: View {
                     .ignoresSafeArea()
 
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: 18) {
                         profileHeader
                         statsSection
                         subscriptionSection
@@ -57,10 +57,9 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: - Profile Header
+    // MARK: - Profile Header (compact; no large avatar)
     private var profileHeader: some View {
-        VStack(spacing: 16) {
-            // Avatar
+        HStack(spacing: 12) {
             ZStack {
                 Circle()
                     .fill(
@@ -70,22 +69,19 @@ struct ProfileView: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 80, height: 80)
-
+                    .frame(width: 40, height: 40)
                 Text(String(userName.prefix(1)).uppercased())
-                    .font(.system(size: 32, weight: .bold, design: .serif))
+                    .font(.system(size: 16, weight: .bold, design: .serif))
                     .foregroundStyle(.white)
             }
-
-            VStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(userName)
-                    .font(NoorFont.title)
+                    .font(NoorFont.title2)
                     .foregroundStyle(.white)
-
                 if purchaseManager.isPro {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 4) {
                         Image(systemName: "crown.fill")
-                            .font(.system(size: 12))
+                            .font(.system(size: 10))
                             .foregroundStyle(Color.noorRoseGold)
                         Text("Pro Traveler")
                             .font(NoorFont.caption)
@@ -93,16 +89,16 @@ struct ProfileView: View {
                     }
                 }
             }
+            Spacer()
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
+        .padding(.vertical, 12)
     }
 
     // MARK: - Stats Section
     private var statsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("Your Journey")
-                .font(NoorFont.title2)
+                .font(NoorFont.title)
                 .foregroundStyle(.white)
 
             HStack(spacing: 16) {
@@ -132,9 +128,9 @@ struct ProfileView: View {
 
     // MARK: - Subscription Section
     private var subscriptionSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("Subscription")
-                .font(NoorFont.title2)
+                .font(NoorFont.title)
                 .foregroundStyle(.white)
 
             VStack(spacing: 0) {
@@ -228,15 +224,27 @@ struct ProfileView: View {
 
     // MARK: - About Section
     private var aboutSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("About")
-                .font(NoorFont.title2)
+                .font(NoorFont.title)
                 .foregroundStyle(.white)
 
             VStack(spacing: 0) {
-                linkRow(title: "Contact Support", icon: "envelope")
-                linkRow(title: "Terms of Service", icon: "doc.text")
-                linkRow(title: "Privacy Policy", icon: "hand.raised")
+                linkRow(title: "Contact Support", icon: "envelope") {
+                    if let url = URL(string: "mailto:luna.app.studio@gmail.com") {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                linkRow(title: "Terms of Service", icon: "doc.text") {
+                    if let url = URL(string: "https://noor-website-virid.vercel.app/terms/") {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                linkRow(title: "Privacy Policy", icon: "hand.raised") {
+                    if let url = URL(string: "https://noor-website-virid.vercel.app/privacy/") {
+                        UIApplication.shared.open(url)
+                    }
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: 16))
 
@@ -249,9 +257,9 @@ struct ProfileView: View {
         }
     }
 
-    private func linkRow(title: String, icon: String) -> some View {
+    private func linkRow(title: String, icon: String, action: @escaping () -> Void = {}) -> some View {
         Button {
-            // Handle navigation
+            action()
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: icon)

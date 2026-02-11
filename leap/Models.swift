@@ -154,15 +154,20 @@ final class Streak {
     }
 }
 
-// MARK: - Microhabit (supports grander vision, optional focus timer)
+// MARK: - Microhabit (timeframe, vision tag, custom tag, focus timer, reminder frequency)
 @Model
 final class Microhabit {
     @Attribute(.unique) var id: UUID
     var title: String
-    var habitDescription: String // e.g. "I will ... so that I can become..."
-    var goalID: String? // optional link to Goal (grander vision)
-    var focusDurationMinutes: Int // 0 = no timer
-    var typeRaw: String // "create" | "replace"
+    var habitDescription: String
+    var goalID: String? // tag to a vision (journey/goal)
+    var customTag: String? // optional label e.g. "Health", "Morning routine"
+    var focusDurationMinutes: Int
+    var typeRaw: String
+    var timeframeRaw: String? // "morning" | "afternoon" | "nightly" | "rightNow" | nil = anytime
+    var reminderFrequencyRaw: String?
+    var reminderHour: Int?    // 0–23, when to remind (optional for backward compatibility)
+    var reminderMinute: Int?  // 0–59
     var completedDates: [Date]
     var createdAt: Date
 
@@ -171,13 +176,30 @@ final class Microhabit {
         MicrohabitType(rawValue: typeRaw) ?? .create
     }
 
+    @Transient
+    var timeframe: HabitTimeframe {
+        get { timeframeRaw.flatMap { HabitTimeframe(rawValue: $0) } ?? .anytime }
+        set { timeframeRaw = newValue.rawValue }
+    }
+
+    @Transient
+    var reminderFrequency: HabitReminderFrequency {
+        get { reminderFrequencyRaw.flatMap { HabitReminderFrequency(rawValue: $0) } ?? .never }
+        set { reminderFrequencyRaw = newValue.rawValue }
+    }
+
     init(
         id: UUID = UUID(),
         title: String,
         habitDescription: String = "",
         goalID: String? = nil,
+        customTag: String? = nil,
         focusDurationMinutes: Int = 5,
         type: MicrohabitType = .create,
+        timeframe: HabitTimeframe = .anytime,
+        reminderFrequency: HabitReminderFrequency = .never,
+        reminderHour: Int? = 9,
+        reminderMinute: Int? = 0,
         completedDates: [Date] = [],
         createdAt: Date = .now
     ) {
@@ -185,14 +207,75 @@ final class Microhabit {
         self.title = title
         self.habitDescription = habitDescription
         self.goalID = goalID
+        self.customTag = customTag
         self.focusDurationMinutes = focusDurationMinutes
         self.typeRaw = type.rawValue
+        self.timeframeRaw = timeframe.rawValue
+        self.reminderFrequencyRaw = reminderFrequency.rawValue
+        self.reminderHour = reminderHour
+        self.reminderMinute = reminderMinute
         self.completedDates = completedDates
         self.createdAt = createdAt
     }
 
     @Transient
     var hasFocusTimer: Bool { focusDurationMinutes > 0 }
+}
+
+enum HabitTimeframe: String, CaseIterable {
+    case anytime = "anytime"
+    case morning = "morning"
+    case afternoon = "afternoon"
+    case nightly = "nightly"
+    case rightNow = "rightNow"
+
+    var displayName: String {
+        switch self {
+        case .anytime: return "Anytime"
+        case .morning: return "Morning"
+        case .afternoon: return "Afternoon"
+        case .nightly: return "Nightly"
+        case .rightNow: return "Right now"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .anytime: return "sun.max"
+        case .morning: return "sunrise.fill"
+        case .afternoon: return "sun.noon.fill"
+        case .nightly: return "moon.stars.fill"
+        case .rightNow: return "bolt.fill"
+        }
+    }
+
+    /// Order for grouping (same order as CaseIterable)
+    static var displayOrder: [HabitTimeframe] { [.rightNow, .morning, .afternoon, .nightly, .anytime] }
+}
+
+enum HabitReminderFrequency: String, CaseIterable {
+    case never = "never"
+    case daily = "daily"
+    case weekdays = "weekdays"
+    case weekends = "weekends"
+
+    var displayName: String {
+        switch self {
+        case .never: return "No reminders"
+        case .daily: return "Every day"
+        case .weekdays: return "Weekdays"
+        case .weekends: return "Weekends"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .never: return "bell.slash"
+        case .daily: return "bell.fill"
+        case .weekdays: return "calendar"
+        case .weekends: return "calendar.badge.clock"
+        }
+    }
 }
 
 enum MicrohabitType: String, CaseIterable {
@@ -262,6 +345,7 @@ enum StorageKey {
     static let visionBoards = "noor_vision_boards"
     static let visionItems = "noor_vision_items"
     static let guestPassCount = "noor_guest_pass_count"
+    static let lastDailyFlameDate = "noor_last_daily_flame_date"
 }
 
 // MARK: - Vision item: inspiration + action (Pinterest, destination, or link); can link to a journey
