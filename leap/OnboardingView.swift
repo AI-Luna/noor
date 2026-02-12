@@ -2,13 +2,14 @@
 //  OnboardingView.swift
 //  leap
 //
-//  Cinematic 17-screen onboarding flow
+//  Cinematic onboarding flow with swipeable intro screens
 //  "Travel agency for life" - luxury magazine aesthetic
-//  Quotes trickled in by concept; destination split into 3 screens
+//  Designed for visual impact and easy comprehension
 //
 
 import SwiftUI
 import RevenueCat
+import UserNotifications
 
 // MARK: - Onboarding quotes (trickled in where they match the question/concept)
 private enum OnboardingQuotes {
@@ -24,11 +25,24 @@ private enum OnboardingQuotes {
     static let writing = "Write it down. Make it real."
 }
 
+// MARK: - Intro Page Model
+private struct IntroPage: Identifiable {
+    let id: Int
+    let icon: String?
+    let iconPair: (String, String)?
+    let accentColor: Color
+    let headline: String
+    let subheadline: String?
+    let body: [String]
+    let quote: String?
+}
+
 // MARK: - Main Onboarding Container
 struct OnboardingView: View {
     var onComplete: () -> Void
 
     @State private var currentScreen: Int = 1
+    @State private var introPage: Int = 0
     @State private var selectedCategory: GoalCategory?
     @State private var destination: String = ""
     @State private var timeline: String = ""
@@ -39,395 +53,285 @@ struct OnboardingView: View {
     @State private var boardingPass: String = ""
     @State private var isGenerating: Bool = false
     @State private var showPaywall: Bool = false
+    @State private var visibleChallengeCount: Int = 0
+    
+    // Splash animation states
+    @State private var starOffset: CGSize = CGSize(width: -200, height: -300)
+    @State private var starScale: CGFloat = 0.3
+    @State private var starRotation: Double = -45
+    @State private var backgroundIsDark: Bool = false
+    @State private var starIsWhite: Bool = false
+    @State private var showDarkOverlay: Bool = false
+    @State private var darkOverlayOffset: CGFloat = -UIScreen.main.bounds.height
 
     @Environment(PurchaseManager.self) private var purchaseManager
+    
+    // Intro pages data (swipeable carousel)
+    private let introPages: [IntroPage] = [
+        IntroPage(
+            id: 0,
+            icon: nil,
+            iconPair: nil,
+            accentColor: .noorRoseGold,
+            headline: "Welcome to Noor",
+            subheadline: "Light in Arabic",
+            body: [
+                "Built on behavioral science, not motivation.",
+                "Designed around how the brain builds habits through attention, action, and reward."
+            ],
+            quote: OnboardingQuotes.welcome
+        ),
+        IntroPage(
+            id: 1,
+            icon: "airplane.departure",
+            iconPair: nil,
+            accentColor: .noorAccent,
+            headline: "Think of us as your travel agency.",
+            subheadline: "Not just for trips. For your entire life.",
+            body: [
+                "We don't help you dream.",
+                "We book your flights.",
+                "Career. Freedom. Adventures. The relationship. The salary.",
+                "You've already lived it in your mind. Now we're making it real."
+            ],
+            quote: OnboardingQuotes.travel
+        ),
+        IntroPage(
+            id: 2,
+            icon: nil,
+            iconPair: ("brain.head.profile", "eye"),
+            accentColor: .noorViolet,
+            headline: "Your brain prioritizes what it sees repeatedly.",
+            subheadline: nil,
+            body: [
+                "Your Reticular Activating System filters millions of inputs.",
+                "What you see daily becomes what your brain seeks.",
+                "Clear visual goals help your brain filter for opportunities that match your future."
+            ],
+            quote: OnboardingQuotes.attention
+        ),
+        IntroPage(
+            id: 3,
+            icon: "point.3.connected.trianglepath.dotted",
+            iconPair: nil,
+            accentColor: .noorSuccess,
+            headline: "Small, consistent actions rewire your brain.",
+            subheadline: "Neuroplasticity in action.",
+            body: [
+                "Every micro-action you complete strengthens the pathway.",
+                "Not through willpower. Through repetition.",
+                "One small step daily builds the person who lives that life."
+            ],
+            quote: OnboardingQuotes.neuroplasticity
+        ),
+        IntroPage(
+            id: 4,
+            icon: "bolt.fill",
+            iconPair: nil,
+            accentColor: .noorOrange,
+            headline: "Completed tasks release dopamine.",
+            subheadline: "Reinforcing motivation and focus.",
+            body: [
+                "The brain repeats behaviors that feel rewarding.",
+                "Small wins build momentum.",
+                "We celebrate every step because your brain needs the signal."
+            ],
+            quote: OnboardingQuotes.dopamine
+        ),
+        IntroPage(
+            id: 5,
+            icon: "crown.fill",
+            iconPair: nil,
+            accentColor: .noorAccent,
+            headline: "Every completed goal is evidence.",
+            subheadline: "Of the person you're becoming.",
+            body: [
+                "You're not trying to become her.",
+                "You're already her.",
+                "These micro-actions are just proof. Progress builds identity."
+            ],
+            quote: OnboardingQuotes.identity
+        )
+    ]
 
     var body: some View {
         ZStack {
-            // Background
             Color.noorBackground
                 .ignoresSafeArea()
 
-            // Screen content — .id(currentScreen) keeps identity stable so typing doesn't retrigger transition
             Group {
                 switch currentScreen {
                 case 1: splashScreen
-                case 2: welcomeScreen
-                case 3: travelAgencyScreen
-                case 4: attentionScienceScreen
-                case 5: neuroplasticityScienceScreen
-                case 6: dopamineScienceScreen
-                case 7: identityShiftScreen
-                case 8: destinationSelectionScreen
-                case 9: scienceAfterDestinationScreen
-                case 10: OnboardingDestinationInputView(destination: $destination, selectedCategory: selectedCategory, onNext: { hapticLight(); advanceScreen() })
-                case 11: OnboardingTimelineInputView(timeline: $timeline, onNext: { hapticLight(); advanceScreen() })
-                case 12: OnboardingStoryInputView(userStory: $userStory, destination: destination, selectedCategory: selectedCategory, onNext: { hapticMedium(); advanceScreen(); generateItinerary() })
-                case 13: aiGenerationScreen
-                case 14: itineraryRevealScreen
-                case 15: genderSelectionScreen
-                case 16: OnboardingNameInputView(userName: $userName, onNext: { hapticLight(); advanceScreen() })
-                case 17: paywallScreen
+                case 2: swipeableIntroScreen
+                case 3: destinationSelectionScreen
+                case 4: scienceAfterDestinationScreen
+                case 5: OnboardingDestinationInputView(destination: $destination, selectedCategory: selectedCategory, onNext: { hapticLight(); advanceScreen() })
+                case 6: OnboardingTimelineInputView(timeline: $timeline, onNext: { hapticLight(); advanceScreen() })
+                case 7: OnboardingStoryInputView(userStory: $userStory, destination: destination, selectedCategory: selectedCategory, onNext: { hapticMedium(); advanceScreen(); generateItinerary() })
+                case 8: aiGenerationScreen
+                case 9: itineraryRevealScreen
+                case 10: OnboardingNameInputView(userName: $userName, onNext: { hapticLight(); advanceScreen() })
+                case 11: genderSelectionScreen
+                case 12: paywallScreen
                 default: splashScreen
                 }
             }
             .id(currentScreen)
-            .transition(.opacity.combined(with: .move(edge: .trailing)))
+            .transition(.asymmetric(
+                insertion: .move(edge: .trailing).combined(with: .opacity),
+                removal: .move(edge: .leading).combined(with: .opacity)
+            ))
         }
+        .animation(.easeInOut(duration: 0.35), value: currentScreen)
     }
 
-    // MARK: - Screen 1: Opening (Atoms-style: minimal, centered, slogan)
+    // MARK: - Screen 1: Splash with Shooting Star
     private var splashScreen: some View {
-        OnboardingCenteredLayout {
-            VStack(spacing: 16) {
-                // "Noor." with distinctive "o" (circle)
-                HStack(spacing: 2) {
-                    Text("N")
-                        .font(NoorFont.hero)
-                        .foregroundStyle(Color.noorTextPrimary)
-                    ZStack {
-                        Circle()
-                            .fill(Color.noorTextPrimary)
-                            .frame(width: 32, height: 32)
-                        Text("o")
-                            .font(NoorFont.hero)
-                            .foregroundStyle(Color.noorBackground)
-                    }
-                    Text("or.")
-                        .font(NoorFont.hero)
-                        .foregroundStyle(Color.noorTextPrimary)
-                }
-
-                Text("Light your path.")
-                    .font(NoorFont.bodyLarge)
-                    .italic()
-                    .foregroundStyle(Color.noorTextSecondary)
+        ZStack {
+            // Background - starts white, transitions to dark
+            (backgroundIsDark ? Color.noorBackground : Color.white)
+                .ignoresSafeArea()
+                .animation(.easeInOut(duration: 0.4), value: backgroundIsDark)
+            
+            // Shooting star
+            Image(systemName: "sparkle")
+                .font(.system(size: 60, weight: .medium))
+                .foregroundStyle(starIsWhite ? Color.white : Color.noorBackground)
+                .scaleEffect(starScale)
+                .rotationEffect(.degrees(starRotation))
+                .offset(starOffset)
+                .animation(.easeInOut(duration: 0.4), value: starIsWhite)
+            
+            // Dark overlay that slides down (for transition to next screen)
+            if showDarkOverlay {
+                Color.noorBackground
+                    .ignoresSafeArea()
+                    .offset(y: darkOverlayOffset)
             }
         }
         .onAppear {
-            hapticMedium()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                withAnimation(.easeInOut(duration: 0.5)) {
-                    currentScreen = 2
+            startSplashAnimation()
+        }
+    }
+    
+    private func startSplashAnimation() {
+        hapticMedium()
+        
+        // Phase 1: Star flies in like a shooting star (0 - 0.8s)
+        withAnimation(.easeOut(duration: 0.8)) {
+            starOffset = .zero
+            starScale = 1.0
+            starRotation = 0
+        }
+        
+        // Phase 2: Background goes dark, star turns white (0.8s - 1.2s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            hapticLight()
+            withAnimation(.easeInOut(duration: 0.4)) {
+                backgroundIsDark = true
+                starIsWhite = true
+            }
+        }
+        
+        // Phase 3: Transition to Welcome screen (1.6s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+            currentScreen = 2
+        }
+    }
+    
+    // MARK: - Screen 2: Swipeable Intro Carousel
+    private var swipeableIntroScreen: some View {
+        VStack(spacing: 0) {
+            TabView(selection: $introPage) {
+                // First page is special with typewriter animation
+                TypewriterIntroPageView(onContinue: {
+                    withAnimation { introPage = 1 }
+                })
+                .tag(0)
+                
+                // Rest of pages (starting from index 1)
+                ForEach(introPages.dropFirst()) { page in
+                    IntroPageView(page: page)
+                        .tag(page.id)
                 }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .animation(.easeInOut(duration: 0.3), value: introPage)
+            
+            // Bottom controls (only show after first page)
+            if introPage > 0 {
+                VStack(spacing: 20) {
+                    // Page indicator
+                    HStack(spacing: 8) {
+                        ForEach(0..<introPages.count, id: \.self) { index in
+                            Capsule()
+                                .fill(index == introPage ? Color.noorAccent : Color.white.opacity(0.3))
+                                .frame(width: index == introPage ? 24 : 8, height: 8)
+                                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: introPage)
+                        }
+                    }
+                    
+                    // Continue button - brighter on final screen
+                    Button {
+                        hapticLight()
+                        if introPage < introPages.count - 1 {
+                            withAnimation { introPage += 1 }
+                        } else {
+                            // Request notification permission before proceeding
+                            requestNotificationPermission()
+                            currentScreen = 3
+                        }
+                    } label: {
+                        if introPage == introPages.count - 1 {
+                            // Get Started - prominent button
+                            HStack(spacing: 8) {
+                                Text("Get Started")
+                                    .font(NoorFont.button)
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 16, weight: .bold))
+                            }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 32)
+                            .padding(.vertical, 16)
+                            .background(Color.noorAccent)
+                            .clipShape(Capsule())
+                            .shadow(color: Color.noorAccent.opacity(0.6), radius: 20, x: 0, y: 4)
+                        } else {
+                            // Continue - subtle text link
+                            HStack(spacing: 6) {
+                                Text("Continue")
+                                    .font(NoorFont.bodyLarge)
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .foregroundStyle(Color.noorAccent)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .animation(.easeInOut(duration: 0.3), value: introPage)
+                }
+                .padding(.bottom, 40)
+                .transition(.opacity)
             }
         }
     }
 
-    // MARK: - Screen 2: Welcome + Science Hook
-    private var welcomeScreen: some View {
-        OnboardingCenteredLayout {
-            VStack(spacing: 24) {
-                VStack(spacing: 16) {
-                Text("Welcome to Noor")
-                    .font(NoorFont.hero)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-
-                Text("Light in Arabic")
-                    .font(NoorFont.bodyLarge)
-                    .foregroundStyle(Color.noorTextSecondary)
-                    .multilineTextAlignment(.center)
-
-                Rectangle()
-                    .fill(Color.noorRoseGold.opacity(0.5))
-                    .frame(width: 60, height: 1)
-                    .padding(.vertical, 8)
-
-                Text("Built on behavioral science, not motivation. Designed around how the brain builds habits—through attention, action, and reward.")
-                    .font(NoorFont.body)
-                    .foregroundStyle(Color.noorTextSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-
-                Text(OnboardingQuotes.welcome)
-                    .font(NoorFont.caption)
-                    .italic()
-                    .foregroundStyle(Color.noorRoseGold.opacity(0.9))
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 8)
-                }
-
-                OnboardingButton(title: "Continue") {
-                    hapticLight()
-                    advanceScreen()
-                }
-            }
-            .padding(NoorLayout.horizontalPadding)
-        }
-    }
-
-    // MARK: - Screen 3: Travel Agency Metaphor
-    private var travelAgencyScreen: some View {
-        OnboardingCenteredLayout {
-            VStack(spacing: 24) {
-                Image(systemName: "airplane.departure")
-                .font(.system(size: 64))
-                .foregroundStyle(Color.noorRoseGold)
-
-            VStack(spacing: 20) {
-                Text("Think of us as your travel agency.")
-                    .font(NoorFont.largeTitle)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-
-                Text("Not just for trips—for your entire life.")
-                    .font(NoorFont.title2)
-                    .foregroundStyle(Color.noorRoseGold)
-                    .multilineTextAlignment(.center)
-
-                Text("We don't help you dream. We book your flights. Career. Freedom. Adventures. The relationship. The salary.\n\nYou've already lived it in your mind. Now we're making it real.")
-                    .font(NoorFont.body)
-                    .foregroundStyle(Color.noorTextSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 16)
-
-                Text(OnboardingQuotes.travel)
-                    .font(NoorFont.caption)
-                    .italic()
-                    .foregroundStyle(Color.noorRoseGold.opacity(0.9))
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 8)
-                }
-
-                OnboardingButton(title: "I'm ready") {
-                    hapticStrong()
-                    advanceScreen()
-                }
-            }
-            .padding(NoorLayout.horizontalPadding)
-        }
-    }
-
-    // MARK: - Screen 4: Attention Science (RAS)
-    private var attentionScienceScreen: some View {
-        OnboardingCenteredLayout {
-            VStack(spacing: 24) {
-                HStack(spacing: 12) {
-                Image(systemName: "brain.head.profile")
-                    .font(.system(size: 32))
-                Image(systemName: "eye")
-                    .font(.system(size: 32))
-            }
-            .foregroundStyle(Color.noorRoseGold)
-
-            VStack(spacing: 20) {
-                Text("Neuroscience shows the brain prioritizes what it sees repeatedly.")
-                    .font(NoorFont.title)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .italic()
-
-                Rectangle()
-                    .fill(Color.noorRoseGold.opacity(0.5))
-                    .frame(width: 60, height: 1)
-
-                Text("Your Reticular Activating System filters millions of inputs. What you see daily becomes what your brain seeks.\n\nClear visual goals help your brain filter for opportunities that match your future.")
-                    .font(NoorFont.body)
-                    .foregroundStyle(Color.noorTextSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 16)
-
-                Text(OnboardingQuotes.attention)
-                    .font(NoorFont.caption)
-                    .italic()
-                    .foregroundStyle(Color.noorRoseGold.opacity(0.9))
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 8)
-                }
-
-                OnboardingButton(title: "Next") {
-                    hapticLight()
-                    advanceScreen()
-                }
-            }
-            .padding(NoorLayout.horizontalPadding)
-        }
-    }
-
-    // MARK: - Screen 5: Neuroplasticity Science
-    private var neuroplasticityScienceScreen: some View {
-        OnboardingCenteredLayout {
-            VStack(spacing: 24) {
-                // Neural pathway visualization
-            ZStack {
-                ForEach(0..<5) { i in
-                    Circle()
-                        .stroke(Color.noorViolet.opacity(0.3), lineWidth: 2)
-                        .frame(width: CGFloat(40 + i * 20), height: CGFloat(40 + i * 20))
-                }
-                Image(systemName: "point.3.connected.trianglepath.dotted")
-                    .font(.system(size: 32))
-                    .foregroundStyle(Color.noorRoseGold)
-            }
-
-            VStack(spacing: 20) {
-                Text("Small, consistent actions rewire neural pathways through neuroplasticity.")
-                    .font(NoorFont.title)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .italic()
-
-                Rectangle()
-                    .fill(Color.noorRoseGold.opacity(0.5))
-                    .frame(width: 60, height: 1)
-
-                Text("Every micro-action you complete strengthens the pathway. Not through willpower. Through repetition.\n\nOne small step daily builds the person who lives that life.")
-                    .font(NoorFont.body)
-                    .foregroundStyle(Color.noorTextSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 16)
-
-                Text(OnboardingQuotes.neuroplasticity)
-                    .font(NoorFont.caption)
-                    .italic()
-                    .foregroundStyle(Color.noorRoseGold.opacity(0.9))
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 8)
-                }
-
-                OnboardingButton(title: "Next") {
-                    hapticLight()
-                    advanceScreen()
-                }
-            }
-            .padding(NoorLayout.horizontalPadding)
-        }
-    }
-
-    // MARK: - Screen 6: Dopamine Science
-    private var dopamineScienceScreen: some View {
-        OnboardingCenteredLayout {
-            VStack(spacing: 24) {
-                // Sparkle burst
-            ZStack {
-                ForEach(0..<6) { i in
-                    Image(systemName: "sparkle")
-                        .font(.system(size: 16))
-                        .foregroundStyle(Color.noorRoseGold)
-                        .offset(
-                            x: cos(Double(i) * .pi / 3) * 40,
-                            y: sin(Double(i) * .pi / 3) * 40
-                        )
-                }
-                Image(systemName: "bolt.fill")
-                    .font(.system(size: 40))
-                    .foregroundStyle(Color.noorOrange)
-            }
-
-            VStack(spacing: 20) {
-                Text("Each completed task releases dopamine, reinforcing motivation and focus.")
-                    .font(NoorFont.title)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .italic()
-
-                Rectangle()
-                    .fill(Color.noorRoseGold.opacity(0.5))
-                    .frame(width: 60, height: 1)
-
-                Text("The brain repeats behaviors that feel rewarding. Small wins build momentum.\n\nWe celebrate every step—not because it's cute, but because your brain needs the signal.")
-                    .font(NoorFont.body)
-                    .foregroundStyle(Color.noorTextSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 16)
-
-                Text(OnboardingQuotes.dopamine)
-                    .font(NoorFont.caption)
-                    .italic()
-                    .foregroundStyle(Color.noorRoseGold.opacity(0.9))
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 8)
-                }
-
-                OnboardingButton(title: "Next") {
-                    hapticMedium()
-                    advanceScreen()
-                }
-            }
-            .padding(NoorLayout.horizontalPadding)
-        }
-    }
-
-    // MARK: - Screen 7: Identity Shift
-    private var identityShiftScreen: some View {
-        OnboardingCenteredLayout {
-            VStack(spacing: 24) {
-                // Transformation visual
-            HStack(spacing: 24) {
-                Circle()
-                    .stroke(Color.noorViolet.opacity(0.5), lineWidth: 2)
-                    .frame(width: 50, height: 50)
-
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 24))
-                    .foregroundStyle(Color.noorRoseGold)
-
-                ZStack {
-                    Circle()
-                        .fill(Color.noorViolet.opacity(0.3))
-                        .frame(width: 60, height: 60)
-                    Image(systemName: "crown.fill")
-                        .font(.system(size: 28))
-                        .foregroundStyle(Color.noorRoseGold)
-                }
-            }
-
-            VStack(spacing: 20) {
-                Text("Every completed goal is evidence of the person you're becoming.")
-                    .font(NoorFont.title)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .italic()
-
-                Rectangle()
-                    .fill(Color.noorRoseGold.opacity(0.5))
-                    .frame(width: 60, height: 1)
-
-                Text("You're not trying to become her.\nYou're already her.")
-                    .font(NoorFont.title2)
-                    .foregroundStyle(Color.noorAccent)
-                    .multilineTextAlignment(.center)
-
-                Text("These micro-actions are just proof. Progress builds identity. Identity drives lasting change.")
-                    .font(NoorFont.body)
-                    .foregroundStyle(Color.noorTextSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 16)
-
-                Text(OnboardingQuotes.identity)
-                    .font(NoorFont.caption)
-                    .italic()
-                    .foregroundStyle(Color.noorRoseGold.opacity(0.9))
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 8)
-                }
-
-                OnboardingButton(title: "Next") {
-                    hapticStrong()
-                    advanceScreen()
-                }
-            }
-            .padding(NoorLayout.horizontalPadding)
-        }
-    }
-
-    // MARK: - Screen 8: Destination Selection (no scroll – button always visible)
+    // MARK: - Screen 3: Destination Selection
     private var destinationSelectionScreen: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 12) {
+            Spacer()
+            
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Let's book your first flight.")
                     .font(NoorFont.largeTitle)
                     .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
 
                 Text("Where are you traveling first?")
                     .font(NoorFont.bodyLarge)
                     .foregroundStyle(Color.noorTextSecondary)
-                    .multilineTextAlignment(.center)
             }
-            .padding(.top, 24)
-            .padding(.bottom, 20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 28)
 
             VStack(spacing: 10) {
                 ForEach(GoalCategory.allCases) { category in
@@ -442,194 +346,70 @@ struct OnboardingView: View {
                     }
                 }
             }
-            .padding(.horizontal, 4)
+            
+            Spacer()
 
-            Spacer(minLength: 20)
-
-            OnboardingButton(
-                title: "Select one to start",
+            OnboardingTextButton(
+                title: selectedCategory == nil ? "Select one to start" : "Continue",
                 isDisabled: selectedCategory == nil
             ) {
                 hapticLight()
                 advanceScreen()
             }
+            .padding(.bottom, 20)
         }
-        .padding(NoorLayout.horizontalPadding)
+        .padding(.horizontal, NoorLayout.horizontalPadding)
     }
 
-    // MARK: - Screen 9: Science (after destination selection)
+    // MARK: - Screen 4: Science (after destination)
     private var scienceAfterDestinationScreen: some View {
-        OnboardingCenteredLayout {
-            VStack(spacing: 24) {
+        VStack(spacing: 0) {
+            Spacer()
+            
+            VStack(alignment: .leading, spacing: 24) {
                 Image(systemName: "pencil.and.list.clipboard")
-                    .font(.system(size: 40))
+                    .font(.system(size: 48))
                     .foregroundStyle(Color.noorRoseGold)
 
-                VStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 16) {
                     Text("Why writing it down works.")
-                        .font(NoorFont.title)
+                        .font(NoorFont.largeTitle)
                         .foregroundStyle(Color.noorTextPrimary)
-                        .multilineTextAlignment(.center)
                         .italic()
 
                     Rectangle()
                         .fill(Color.noorRoseGold.opacity(0.5))
-                        .frame(width: 60, height: 1)
+                        .frame(width: 60, height: 2)
 
-                    Text("Implementation intentions—\"When X, I will Y\"—activate the same brain regions as the action itself. Writing your destination and timeline turns a wish into a plan your brain can execute.")
-                        .font(NoorFont.body)
+                    Text("Writing your goal turns a wish into a plan your brain can act on.")
+                        .font(NoorFont.title2)
                         .foregroundStyle(Color.noorTextSecondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
 
                     Text(OnboardingQuotes.writing)
-                        .font(NoorFont.caption)
+                        .font(NoorFont.body)
                         .italic()
-                        .foregroundStyle(Color.noorRoseGold.opacity(0.9))
-                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color.noorRoseGold)
                         .padding(.top, 8)
                 }
-
-                OnboardingButton(title: "Next") {
-                    hapticLight()
-                    advanceScreen()
-                }
-                .padding(.top, 8)
             }
-            .padding(NoorLayout.horizontalPadding)
-        }
-    }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            
+            Spacer()
 
-    // MARK: - Screen 10: Destination only (first of 3 “perfect destination” screens)
-    private var destinationOnlyScreen: some View {
-        OnboardingCenteredLayout {
-            VStack(spacing: 28) {
-                VStack(spacing: 12) {
-                    Text(selectedCategory?.travelAgencyTitle ?? "What's your perfect destination?")
-                        .font(NoorFont.largeTitle)
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-
-                    if selectedCategory == .travel {
-                        Text("This trip you've been pinning about for years—where is it?")
-                            .font(NoorFont.body)
-                            .foregroundStyle(Color.noorTextSecondary)
-                            .multilineTextAlignment(.center)
-                    }
-
-                    Text(OnboardingQuotes.destination)
-                        .font(NoorFont.caption)
-                        .italic()
-                        .foregroundStyle(Color.noorRoseGold.opacity(0.9))
-                        .multilineTextAlignment(.center)
-                        .padding(.top, 4)
-                }
-
-                TextField(selectedCategory?.destinationPlaceholder ?? "Your goal", text: $destination)
-                    .textFieldStyle(.plain)
-                    .font(NoorFont.body)
-                    .foregroundStyle(.white)
-                    .padding(20)
-                    .background(Color.white.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .padding(.horizontal, 24)
-
-                OnboardingButton(title: "Next", isDisabled: destination.trimmingCharacters(in: .whitespaces).isEmpty) {
-                    hapticLight()
-                    advanceScreen()
-                }
-                .padding(.horizontal, NoorLayout.horizontalPadding)
-            }
-            .padding(NoorLayout.horizontalPadding)
-        }
-    }
-
-    // MARK: - Screen 11: Timeline only (second of 3)
-    private var timelineOnlyScreen: some View {
-        OnboardingCenteredLayout {
-            VStack(spacing: 28) {
-                VStack(spacing: 12) {
-                    Text("When do you want to arrive?")
-                        .font(NoorFont.largeTitle)
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-
-                    Text("A date makes it real.")
-                        .font(NoorFont.body)
-                        .foregroundStyle(Color.noorTextSecondary)
-                        .multilineTextAlignment(.center)
-
-                    Text(OnboardingQuotes.timeline)
-                        .font(NoorFont.caption)
-                        .italic()
-                        .foregroundStyle(Color.noorRoseGold.opacity(0.9))
-                        .multilineTextAlignment(.center)
-                        .padding(.top, 4)
-                }
-
-                TextField("e.g. June 2026", text: $timeline)
-                    .textFieldStyle(.plain)
-                    .font(NoorFont.body)
-                    .foregroundStyle(.white)
-                    .padding(20)
-                    .background(Color.white.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .padding(.horizontal, 24)
-
-                OnboardingButton(title: "Next") {
-                    hapticLight()
-                    advanceScreen()
-                }
-                .padding(.horizontal, NoorLayout.horizontalPadding)
-            }
-            .padding(NoorLayout.horizontalPadding)
-        }
-    }
-
-    // MARK: - Screen 12: Story only (third of 3) + Book my itinerary (no scroll – button always visible)
-    private var storyOnlyScreen: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: 8) {
-                Text(selectedCategory?.storyPrompt ?? "Why does this matter to you?")
-                    .font(NoorFont.largeTitle)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-
-                Text(OnboardingQuotes.story)
-                    .font(NoorFont.caption)
-                    .italic()
-                    .foregroundStyle(Color.noorRoseGold.opacity(0.9))
-                    .multilineTextAlignment(.center)
-            }
-            .padding(.top, 28)
-            .padding(.bottom, 16)
-
-            TextEditor(text: $userStory)
-                .scrollContentBackground(.hidden)
-                .font(NoorFont.body)
-                .foregroundStyle(.white)
-                .frame(height: 100)
-                .padding(16)
-                .background(Color.white.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-
-            Spacer(minLength: 24)
-
-            OnboardingButton(title: "Book my itinerary", isDisabled: destination.isEmpty) {
-                hapticMedium()
+            OnboardingTextButton(title: "Continue") {
+                hapticLight()
                 advanceScreen()
-                generateItinerary()
             }
+            .padding(.bottom, 20)
         }
-        .padding(NoorLayout.horizontalPadding)
+        .padding(.horizontal, NoorLayout.horizontalPadding)
     }
 
-    // MARK: - Screen 13: AI Generation Loading
+    // MARK: - Screen 8: AI Generation Loading
     private var aiGenerationScreen: some View {
         VStack(spacing: 40) {
             Spacer()
 
-            // Boarding pass visual
             ZStack {
                 RoundedRectangle(cornerRadius: 20)
                     .fill(Color.white.opacity(0.1))
@@ -642,9 +422,9 @@ struct OnboardingView: View {
                         .rotationEffect(.degrees(-15))
 
                     HStack(spacing: 8) {
-                        ForEach(0..<3) { i in
+                        ForEach(0..<3, id: \.self) { i in
                             Circle()
-                                .fill(Color.noorRoseGold)
+                                .fill(Color.noorAccent)
                                 .frame(width: 8, height: 8)
                                 .opacity(isGenerating ? 1 : 0.3)
                                 .animation(
@@ -662,19 +442,16 @@ struct OnboardingView: View {
                 Text("Mapping your route...")
                     .font(NoorFont.title)
                     .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
 
                 if !destination.isEmpty {
                     Text("Destination: \(destination)")
                         .font(NoorFont.body)
                         .foregroundStyle(Color.noorTextSecondary)
-                        .multilineTextAlignment(.center)
                 }
 
                 Text("Building your 7-step itinerary")
                     .font(NoorFont.caption)
-                    .foregroundStyle(Color.noorRoseGold)
-                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Color.noorAccent)
             }
 
             Spacer()
@@ -684,157 +461,182 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Screen 14: Itinerary Reveal (scroll for list; primary button fixed at bottom so next step is obvious)
+    // MARK: - Screen 9: Itinerary Reveal
     private var itineraryRevealScreen: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 20) {
-                    VStack(spacing: 8) {
-                        Image(systemName: selectedCategory?.icon ?? "target")
-                            .font(.system(size: 36))
-                            .foregroundStyle(Color.noorRoseGold)
-
-                        Text("Your \(destination) Itinerary")
-                            .font(NoorFont.largeTitle)
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 24) {
+                    // Header with white flight icon
+                    VStack(spacing: 12) {
+                        Image(systemName: "airplane")
+                            .font(.system(size: 40))
                             .foregroundStyle(.white)
-                            .multilineTextAlignment(.center)
+                            .rotationEffect(.degrees(-45))
 
-                        Text("Departure: Now | Arrival: \(timeline.isEmpty ? "Your timeline" : timeline)")
-                            .font(NoorFont.caption)
-                            .foregroundStyle(Color.noorTextSecondary)
-                            .multilineTextAlignment(.center)
+                        VStack(spacing: 4) {
+                            Text("Your Flight to \(destination)")
+                                .font(NoorFont.largeTitle)
+                                .foregroundStyle(.white)
+                                .multilineTextAlignment(.center)
+                            
+                            Text("is now boarding")
+                                .font(NoorFont.title)
+                                .foregroundStyle(Color.noorAccent)
+                        }
+
+                        // Departure: Location → Arrival: Location with colors
+                        HStack(spacing: 8) {
+                            // Departure
+                            HStack(spacing: 4) {
+                                Text("Departure:")
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                                Text("Now")
+                                    .font(NoorFont.callout)
+                                    .foregroundStyle(Color.noorSuccess)
+                                    .fontWeight(.semibold)
+                            }
+                            
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Color.noorTextSecondary)
+                            
+                            // Arrival
+                            HStack(spacing: 4) {
+                                Text("Arrival:")
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                                Text(timeline.isEmpty ? "Your timeline" : timeline)
+                                    .font(NoorFont.callout)
+                                    .foregroundStyle(Color.noorAccent)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .padding(.top, 8)
+                        
+                        // Subtext - same color as Request New Route
+                        if !boardingPass.isEmpty {
+                            Text(boardingPass)
+                                .font(NoorFont.callout)
+                                .foregroundStyle(Color.noorTextSecondary)
+                                .italic()
+                                .multilineTextAlignment(.center)
+                                .padding(.top, 4)
+                        }
                     }
-                    .padding(.top, 20)
+                    .padding(.top, 24)
 
+                    // 7 Steps with fade-in animation
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Your 7-Step Boarding Process")
+                        Text("Your 7-Step Journey")
                             .font(NoorFont.title2)
                             .foregroundStyle(.white)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity, alignment: .center)
-
+                            .padding(.bottom, 4)
+                        
                         ForEach(Array(generatedChallenges.enumerated()), id: \.element.id) { index, challenge in
                             ItineraryChallengeRow(
                                 number: index + 1,
                                 challenge: challenge,
-                                isUnlocked: challenge.unlocked
+                                isUnlocked: challenge.unlocked,
+                                isFirstUnlocked: index == 0 && challenge.unlocked
                             )
+                            .opacity(index < visibleChallengeCount ? 1 : 0)
+                            .offset(y: index < visibleChallengeCount ? 0 : 10)
+                            .animation(.easeOut(duration: 0.4).delay(Double(index) * 0.15), value: visibleChallengeCount)
                         }
                     }
-                    .padding(.horizontal, 4)
-
-                    if !boardingPass.isEmpty {
-                        Text(boardingPass)
-                            .font(NoorFont.body)
-                            .foregroundStyle(Color.noorRoseGold)
-                            .italic()
-                            .multilineTextAlignment(.center)
-                            .padding(.vertical, 12)
-                    }
-
-                    Spacer().frame(height: 16)
+                    
+                    Spacer().frame(height: 20)
                 }
-                .padding(NoorLayout.horizontalPadding)
+                .padding(.horizontal, NoorLayout.horizontalPadding)
             }
-            .frame(maxHeight: .infinity)
 
-            VStack(spacing: 10) {
-                OnboardingButton(title: "Accept Itinerary") {
+            // Fixed bottom buttons
+            VStack(spacing: 16) {
+                // Big pink button with white text
+                Button {
                     hapticStrong()
                     advanceScreen()
+                } label: {
+                    Text("Accept Itinerary")
+                        .font(NoorFont.button)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: NoorLayout.buttonHeight)
+                        .background(Color.noorAccent)
+                        .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
+                        .shadow(color: Color.noorAccent.opacity(0.4), radius: 12, x: 0, y: 4)
                 }
+                .buttonStyle(.plain)
 
+                // Faint Request New Route
                 Button {
-                    generateItinerary()
-                    currentScreen = 13
+                    // Reset to destination input screen so user can try again
+                    destination = ""
+                    timeline = ""
+                    userStory = ""
+                    generatedChallenges = []
+                    visibleChallengeCount = 0
+                    currentScreen = 5
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "arrow.triangle.2.circlepath")
                         Text("Request New Route")
                     }
-                    .font(NoorFont.callout)
-                    .foregroundStyle(Color.noorTextSecondary)
+                    .font(NoorFont.caption)
+                    .foregroundStyle(Color.noorTextSecondary.opacity(0.7))
                 }
                 .buttonStyle(.plain)
             }
-            .padding(NoorLayout.horizontalPadding)
-            .padding(.vertical, 16)
+            .padding(.horizontal, NoorLayout.horizontalPadding)
+            .padding(.vertical, 12)
             .background(Color.noorBackground)
         }
-    }
-
-    // MARK: - Screen 15: Gender Selection
-    private var genderSelectionScreen: some View {
-        VStack(spacing: 32) {
-            Spacer()
-
-            Text("Quick question for personalized recommendations:")
-                .font(NoorFont.title)
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.center)
-
-            VStack(spacing: 12) {
-                GenderButton(title: "Woman", isSelected: userGender == .woman) {
-                    userGender = .woman
-                }
-                GenderButton(title: "Man", isSelected: userGender == .man) {
-                    userGender = .man
-                }
-                GenderButton(title: "Non-binary", isSelected: userGender == .nonBinary) {
-                    userGender = .nonBinary
-                }
-            }
-
-            Spacer()
-
-            OnboardingButton(title: "Continue") {
-                hapticLight()
-                advanceScreen()
+        .onAppear {
+            // Animate challenges fading in one by one
+            visibleChallengeCount = 0
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                visibleChallengeCount = generatedChallenges.count
             }
         }
-        .padding(NoorLayout.horizontalPadding)
     }
 
-    // MARK: - Screen 16: Name Input
-    private var nameInputScreen: some View {
-        VStack(spacing: 32) {
+    // MARK: - Screen 10: Gender Selection
+    private var genderSelectionScreen: some View {
+        VStack(spacing: 0) {
             Spacer()
-
-            VStack(spacing: 16) {
-                Text("What should we call you?")
-                    .font(NoorFont.largeTitle)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-
-                TextField("Your name", text: $userName)
-                    .textFieldStyle(.plain)
+            
+            VStack(alignment: .leading, spacing: 20) {
+                Text("How do you identify?")
                     .font(NoorFont.title)
                     .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .padding(20)
-                    .background(Color.white.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                Text("We'll greet you each morning and track your journey.")
-                    .font(NoorFont.body)
-                    .foregroundStyle(Color.noorTextSecondary)
-                    .multilineTextAlignment(.center)
+                VStack(spacing: 12) {
+                    GenderButton(title: "Woman", isSelected: userGender == .woman) {
+                        userGender = .woman
+                    }
+                    GenderButton(title: "Man", isSelected: userGender == .man) {
+                        userGender = .man
+                    }
+                    GenderButton(title: "Non-binary", isSelected: userGender == .nonBinary) {
+                        userGender = .nonBinary
+                    }
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Spacer()
 
-            OnboardingButton(
-                title: "Continue",
-                isDisabled: userName.trimmingCharacters(in: .whitespaces).isEmpty
-            ) {
+            OnboardingTextButton(title: "Continue") {
                 hapticLight()
                 advanceScreen()
             }
+            .padding(.bottom, 20)
         }
-        .padding(NoorLayout.horizontalPadding)
+        .padding(.horizontal, NoorLayout.horizontalPadding)
     }
 
-    // MARK: - Screen 17: Paywall (scroll for plans; primary actions fixed at bottom so next step is obvious)
+    // MARK: - Screen 12: Paywall
     private var paywallScreen: some View {
         VStack(spacing: 0) {
             ScrollView {
@@ -842,7 +644,7 @@ struct OnboardingView: View {
                     VStack(spacing: 12) {
                         Image(systemName: "airplane.departure")
                             .font(.system(size: 40))
-                            .foregroundStyle(Color.noorRoseGold)
+                            .foregroundStyle(Color.noorAccent)
 
                         Text("Your ticket is ready.")
                             .font(NoorFont.hero)
@@ -850,7 +652,7 @@ struct OnboardingView: View {
                             .multilineTextAlignment(.center)
 
                         Rectangle()
-                            .fill(Color.noorRoseGold.opacity(0.5))
+                            .fill(Color.noorAccent.opacity(0.5))
                             .frame(width: 60, height: 1)
                     }
                     .padding(.top, 24)
@@ -869,35 +671,43 @@ struct OnboardingView: View {
                         }
                         .font(NoorFont.callout)
                         .foregroundStyle(Color.noorTextSecondary)
+                        
+                        Text("The woman who lives that life invests in herself.")
+                            .font(NoorFont.caption)
+                            .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
+                            .italic()
+                            .padding(.top, 4)
 
                         Button("Skip for now") {
                             saveUserAndComplete()
                         }
                         .font(NoorFont.caption)
                         .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
+                        .padding(.top, 8)
 
                         HStack(spacing: 16) {
-                            Button("Terms & Conditions") { }
+                            Button("Terms & Conditions") {
+                                if let url = URL(string: "https://noor-website-virid.vercel.app/terms/") {
+                                    UIApplication.shared.open(url)
+                                }
+                            }
                                 .font(NoorFont.caption)
                                 .foregroundStyle(Color.noorTextSecondary.opacity(0.7))
 
-                            Button("Privacy Policy") { }
+                            Button("Privacy Policy") {
+                                if let url = URL(string: "https://noor-website-virid.vercel.app/privacy/") {
+                                    UIApplication.shared.open(url)
+                                }
+                            }
                                 .font(NoorFont.caption)
                                 .foregroundStyle(Color.noorTextSecondary.opacity(0.7))
                         }
-
-                        Text("The woman who lives that life invests in herself.")
-                            .font(NoorFont.caption)
-                            .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
-                            .italic()
-                            .padding(.top, 4)
                     }
                     .padding(.top, 12)
                     .padding(.bottom, 20)
                 }
                 .padding(NoorLayout.horizontalPadding)
             }
-            .frame(maxHeight: .infinity)
         }
     }
 
@@ -925,9 +735,9 @@ struct OnboardingView: View {
                     boardingPass = result.encouragement
                 }
                 isGenerating = false
-                if currentScreen == 13 {
+                if currentScreen == 8 {
                     withAnimation(.easeInOut(duration: 0.3)) {
-                        currentScreen = 14
+                        currentScreen = 9
                     }
                 }
             }
@@ -968,7 +778,6 @@ struct OnboardingView: View {
     }
 
     private func saveUserAndComplete() {
-        // Save user profile
         let profile = UserProfile(
             name: userName,
             gender: userGender,
@@ -985,7 +794,6 @@ struct OnboardingView: View {
             UserDefaults.standard.set(data, forKey: StorageKey.userProfile)
         }
 
-        // Save first goal data for creation
         let firstGoal: [String: Any] = [
             "category": selectedCategory?.rawValue ?? "travel",
             "destination": destination,
@@ -1011,100 +819,534 @@ struct OnboardingView: View {
 
     // MARK: - Haptics
     private func hapticLight() {
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     private func hapticMedium() {
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
 
     private func hapticStrong() {
-        let generator = UIImpactFeedbackGenerator(style: .heavy)
-        generator.impactOccurred()
+        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+    }
+    
+    // MARK: - Notifications
+    private func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+            if granted {
+                DispatchQueue.main.async {
+                    UIApplication.shared.registerForRemoteNotifications()
+                }
+            }
+        }
     }
 }
 
-// MARK: - Text-input screens (extracted to avoid full onboarding re-render on every keystroke)
+// MARK: - Typewriter Intro Page (First Page with Special Animation)
+private struct TypewriterIntroPageView: View {
+    let onContinue: () -> Void
+    
+    // Reveal animation states
+    @State private var revealProgress: CGFloat = 0
+    @State private var hasStartedTypewriter: Bool = false
+    
+    // Phase tracking
+    // 0: Typing "Welcome to Noor"
+    // 1: Deleting "Welcome to Noor"
+    // 2: Typing "Built on Motivation"
+    // 3: Strikethrough "Motivation"
+    // 4: Typing "Behavioral Science"
+    // 5: Show rest of content
+    @State private var phase: Int = 0
+    
+    // Text states
+    @State private var welcomeText: String = ""
+    @State private var builtOnText: String = ""
+    @State private var showMotivation: Bool = false
+    @State private var strikethroughProgress: CGFloat = 0
+    @State private var behavioralScienceText: String = ""
+    @State private var showCursor: Bool = true
+    @State private var cursorTimer: Timer?
+    
+    // Content fade states
+    @State private var subtextOpacity: Double = 0
+    @State private var buttonOpacity: Double = 0
+    @State private var dotsOpacity: Double = 0
+    
+    private let fullWelcome = "Welcome to Noor"
+    private let builtOnFull = "Built on "
+    private let motivationWord = "Motivation"
+    private let behavioralScienceFull = "Behavioral Science"
+    private let screenHeight = UIScreen.main.bounds.height
+    
+    var body: some View {
+        ZStack {
+            VStack(spacing: 0) {
+                Spacer()
+                
+                VStack(spacing: 32) {
+                    // Main text area
+                    VStack(spacing: 16) {
+                        // Phase 0-1: "Welcome to Noor"
+                        if phase < 2 {
+                            HStack(spacing: 0) {
+                                Text(welcomeText)
+                                    .font(NoorFont.hero)
+                                    .foregroundStyle(.white)
+                                
+                                if showCursor && hasStartedTypewriter {
+                                    Rectangle()
+                                        .fill(Color.noorAccent)
+                                        .frame(width: 3, height: 40)
+                                }
+                            }
+                            .frame(height: 50)
+                        }
+                        
+                        // Phase 2+: "Built on Motivation" -> "Behavioral Science"
+                        if phase >= 2 {
+                            VStack(spacing: 12) {
+                                // "Built on" + Motivation/Behavioral Science
+                                HStack(spacing: 0) {
+                                    Text(builtOnText)
+                                        .font(NoorFont.largeTitle)
+                                        .foregroundStyle(.white)
+                                    
+                                    // Motivation with strikethrough
+                                    if showMotivation {
+                                        ZStack {
+                                            Text(motivationWord)
+                                                .font(NoorFont.largeTitle)
+                                                .foregroundStyle(strikethroughProgress > 0 ? Color.noorTextSecondary.opacity(0.5) : .white)
+                                            
+                                            // Strikethrough line
+                                            GeometryReader { geo in
+                                                Rectangle()
+                                                    .fill(Color.noorAccent)
+                                                    .frame(width: geo.size.width * strikethroughProgress, height: 3)
+                                                    .offset(y: geo.size.height / 2 - 1.5)
+                                            }
+                                        }
+                                        .fixedSize()
+                                    }
+                                    
+                                    // Behavioral Science (typed in after strikethrough)
+                                    if phase >= 4 && !behavioralScienceText.isEmpty {
+                                        Text(behavioralScienceText)
+                                            .font(NoorFont.largeTitle)
+                                            .foregroundStyle(Color.noorAccent)
+                                            .fontWeight(.bold)
+                                    }
+                                    
+                                    // Cursor during typing phases
+                                    if showCursor && (phase == 2 || phase == 4) {
+                                        Rectangle()
+                                            .fill(Color.noorAccent)
+                                            .frame(width: 3, height: 32)
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Subtext after animation completes - one seamless statement
+                        if phase >= 5 {
+                            Text("Designed around how your brain builds habits through attention, action, and reward.")
+                                .font(NoorFont.bodyLarge)
+                                .foregroundStyle(Color.noorTextSecondary)
+                                .multilineTextAlignment(.center)
+                                .opacity(subtextOpacity)
+                                .padding(.top, 16)
+                                .padding(.horizontal, 8)
+                        }
+                    }
+                    .frame(minHeight: 200)
+                }
+                .padding(.horizontal, NoorLayout.horizontalPadding)
+                
+                Spacer()
+                
+                // Bottom controls
+                VStack(spacing: 20) {
+                    HStack(spacing: 8) {
+                        ForEach(0..<6, id: \.self) { index in
+                            Capsule()
+                                .fill(index == 0 ? Color.noorAccent : Color.white.opacity(0.3))
+                                .frame(width: index == 0 ? 24 : 8, height: 8)
+                        }
+                    }
+                    .opacity(dotsOpacity)
+                    
+                    Button {
+                        onContinue()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("Continue")
+                                .font(NoorFont.bodyLarge)
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                        .foregroundStyle(Color.noorAccent)
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(buttonOpacity)
+                }
+                .padding(.bottom, 40)
+            }
+            .mask(
+                VStack(spacing: 0) {
+                    Rectangle()
+                        .frame(height: screenHeight * revealProgress)
+                    Spacer(minLength: 0)
+                }
+            )
+        }
+        .onAppear {
+            // Only start if we haven't already
+            if !hasStartedTypewriter && revealProgress == 0 {
+                startRevealAnimation()
+            }
+        }
+        .onDisappear {
+            cursorTimer?.invalidate()
+        }
+    }
+    
+    private func startRevealAnimation() {
+        // Reset all state to prevent accumulation bugs
+        phase = 0
+        welcomeText = ""
+        builtOnText = ""
+        showMotivation = false
+        strikethroughProgress = 0
+        behavioralScienceText = ""
+        subtextOpacity = 0
+        buttonOpacity = 0
+        dotsOpacity = 0
+        
+        withAnimation(.easeOut(duration: 0.6)) {
+            revealProgress = 1.0
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            hasStartedTypewriter = true
+            startCursorBlink()
+            typeWelcome()
+        }
+    }
+    
+    private func startCursorBlink() {
+        cursorTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            if phase == 3 || phase >= 5 {
+                showCursor = false
+            } else {
+                showCursor.toggle()
+            }
+        }
+    }
+    
+    // Phase 0: Type "Welcome to Noor" - slower, softer
+    private func typeWelcome() {
+        guard phase == 0 else { return }
+        for (index, char) in fullWelcome.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.12) {
+                guard self.phase == 0 else { return }
+                self.welcomeText = String(self.fullWelcome.prefix(index + 1))
+                
+                if index == self.fullWelcome.count - 1 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                        self.phase = 1
+                        self.deleteWelcome()
+                    }
+                }
+            }
+        }
+    }
+    
+    // Phase 1: Delete "Welcome to Noor" - slightly slower
+    private func deleteWelcome() {
+        guard phase == 1 else { return }
+        for index in 0..<fullWelcome.count {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.05) {
+                guard self.phase == 1 else { return }
+                let remaining = self.fullWelcome.count - index - 1
+                self.welcomeText = String(self.fullWelcome.prefix(remaining))
+                
+                if remaining == 0 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        self.phase = 2
+                        self.typeBuiltOnMotivation()
+                    }
+                }
+            }
+        }
+    }
+    
+    // Phase 2: Type "Built on Motivation" - slower, softer
+    private func typeBuiltOnMotivation() {
+        guard phase == 2 else { return }
+        // First type "Built on "
+        for (index, char) in builtOnFull.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.12) {
+                guard self.phase == 2 else { return }
+                self.builtOnText = String(self.builtOnFull.prefix(index + 1))
+                
+                if index == self.builtOnFull.count - 1 {
+                    // Then show "Motivation" instantly and pause
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        self.showMotivation = true
+                        
+                        // Pause, then strikethrough
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            self.phase = 3
+                            self.strikethroughMotivation()
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Phase 3: Strike through "Motivation"
+    private func strikethroughMotivation() {
+        withAnimation(.easeInOut(duration: 0.5)) {
+            strikethroughProgress = 1.0
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            // Hide motivation and show Behavioral Science instantly (like Motivation appeared)
+            showMotivation = false
+            phase = 4
+            showBehavioralScience()
+        }
+    }
+    
+    // Phase 4: Show "Behavioral Science" instantly (same as Motivation)
+    private func showBehavioralScience() {
+        guard phase == 4 else { return }
+        behavioralScienceText = behavioralScienceFull
+        
+        // Wait a moment, then show final content
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            phase = 5
+            showFinalContent()
+        }
+    }
+    
+    // Phase 5: Show subtext and controls - slow, gentle fade
+    private func showFinalContent() {
+        // Wait a moment before fading in the subtext
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.easeOut(duration: 1.2)) {
+                subtextOpacity = 1
+            }
+        }
+        
+        // Show controls after subtext starts fading in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            withAnimation(.easeOut(duration: 0.6)) {
+                dotsOpacity = 1
+                buttonOpacity = 1
+            }
+        }
+    }
+}
+
+// MARK: - Intro Page View (for swipeable carousel)
+private struct IntroPageView: View {
+    let page: IntroPage
+    @State private var headlineAppeared = false
+    @State private var restAppeared = false
+    
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 24) {
+                Spacer().frame(height: 40)
+                
+                // Icon - appears with headline
+                Group {
+                    if let icon = page.icon {
+                        Image(systemName: icon)
+                            .font(.system(size: 56))
+                            .foregroundStyle(page.accentColor)
+                    } else if let pair = page.iconPair {
+                        HStack(spacing: 16) {
+                            Image(systemName: pair.0)
+                                .font(.system(size: 40))
+                            Image(systemName: pair.1)
+                                .font(.system(size: 40))
+                        }
+                        .foregroundStyle(page.accentColor)
+                    }
+                }
+                .opacity(headlineAppeared ? 1 : 0)
+                .offset(y: headlineAppeared ? 0 : 20)
+                
+                // Headline - appears first
+                Text(page.headline)
+                    .font(NoorFont.largeTitle)
+                    .foregroundStyle(.white)
+                    .opacity(headlineAppeared ? 1 : 0)
+                    .offset(y: headlineAppeared ? 0 : 20)
+                
+                // Subheadline - fades in slowly after headline
+                if let subheadline = page.subheadline {
+                    Text(subheadline)
+                        .font(NoorFont.title)
+                        .foregroundStyle(page.accentColor)
+                        .opacity(restAppeared ? 1 : 0)
+                        .offset(y: restAppeared ? 0 : 15)
+                }
+                
+                // Divider - fades in with rest
+                Rectangle()
+                    .fill(page.accentColor.opacity(0.5))
+                    .frame(width: 60, height: 2)
+                    .opacity(restAppeared ? 1 : 0)
+                
+                // Body text - fades in slowly, staggered
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(Array(page.body.enumerated()), id: \.offset) { index, text in
+                        Text(text)
+                            .font(NoorFont.bodyLarge)
+                            .foregroundStyle(Color.noorTextSecondary)
+                            .opacity(restAppeared ? 1 : 0)
+                            .offset(y: restAppeared ? 0 : 10)
+                            .animation(.easeOut(duration: 0.6).delay(Double(index) * 0.15), value: restAppeared)
+                    }
+                }
+                
+                // Quote - fades in last
+                if let quote = page.quote {
+                    Text("\"\(quote)\"")
+                        .font(NoorFont.body)
+                        .italic()
+                        .foregroundStyle(page.accentColor.opacity(0.9))
+                        .padding(.top, 8)
+                        .opacity(restAppeared ? 1 : 0)
+                        .animation(.easeOut(duration: 0.6).delay(0.6), value: restAppeared)
+                }
+                
+                Spacer().frame(height: 120)
+            }
+            .padding(.horizontal, NoorLayout.horizontalPadding)
+        }
+        .onAppear {
+            // Headline appears first
+            withAnimation(.easeOut(duration: 0.4)) {
+                headlineAppeared = true
+            }
+            // Rest fades in slowly after a moment
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                withAnimation(.easeOut(duration: 0.8)) {
+                    restAppeared = true
+                }
+            }
+        }
+        .onDisappear {
+            appeared = false
+        }
+    }
+}
+
+// MARK: - Text-input screens (extracted for performance)
 private struct OnboardingDestinationInputView: View {
     @Binding var destination: String
     let selectedCategory: GoalCategory?
     let onNext: () -> Void
+    @FocusState private var isFocused: Bool
 
     var body: some View {
-        OnboardingCenteredLayout {
-            VStack(spacing: 28) {
-                VStack(spacing: 12) {
-                    Text(selectedCategory?.travelAgencyTitle ?? "What's your perfect destination?")
-                        .font(NoorFont.largeTitle)
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                    if selectedCategory == .travel {
-                        Text("This trip you've been pinning about for years—where is it?")
-                            .font(NoorFont.body)
-                            .foregroundStyle(Color.noorTextSecondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    Text(OnboardingQuotes.destination)
-                        .font(NoorFont.caption)
-                        .italic()
-                        .foregroundStyle(Color.noorRoseGold.opacity(0.9))
-                        .multilineTextAlignment(.center)
-                        .padding(.top, 4)
-                }
-                TextField(selectedCategory?.destinationPlaceholder ?? "Your goal", text: $destination)
-                    .textFieldStyle(.plain)
-                    .font(NoorFont.body)
+        VStack(spacing: 0) {
+            Spacer()
+            
+            VStack(alignment: .leading, spacing: 16) {
+                Text(selectedCategory?.travelAgencyTitle ?? "What's your perfect destination?")
+                    .font(NoorFont.largeTitle)
                     .foregroundStyle(.white)
-                    .padding(20)
-                    .background(Color.white.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .padding(.horizontal, 24)
-                OnboardingButton(title: "Next", isDisabled: destination.trimmingCharacters(in: .whitespaces).isEmpty, action: onNext)
-                    .padding(.horizontal, NoorLayout.horizontalPadding)
+                
+                if selectedCategory == .travel {
+                    Text("This trip you've been pinning about for years. Where is it?")
+                        .font(NoorFont.title)
+                        .foregroundStyle(Color.noorTextSecondary)
+                }
+                
+                Text(OnboardingQuotes.destination)
+                    .font(NoorFont.title)
+                    .italic()
+                    .foregroundStyle(Color.noorRoseGold)
+                    .padding(.top, 4)
             }
-            .padding(NoorLayout.horizontalPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 24)
+            
+            TextField(selectedCategory?.destinationPlaceholder ?? "Your goal", text: $destination)
+                .textFieldStyle(.plain)
+                .font(NoorFont.title)
+                .foregroundStyle(.white)
+                .tint(Color.noorAccent)
+                .padding(20)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .focused($isFocused)
+            
+            Spacer()
+            
+            OnboardingTextButton(
+                title: "Continue",
+                isDisabled: destination.trimmingCharacters(in: .whitespaces).isEmpty,
+                action: onNext
+            )
+            .padding(.bottom, 20)
         }
+        .padding(.horizontal, NoorLayout.horizontalPadding)
+        .onAppear { isFocused = true }
     }
 }
 
 private struct OnboardingTimelineInputView: View {
     @Binding var timeline: String
     let onNext: () -> Void
+    @FocusState private var isFocused: Bool
 
     var body: some View {
-        OnboardingCenteredLayout {
-            VStack(spacing: 28) {
-                VStack(spacing: 12) {
-                    Text("When do you want to arrive?")
-                        .font(NoorFont.largeTitle)
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                    Text("A date makes it real.")
-                        .font(NoorFont.body)
-                        .foregroundStyle(Color.noorTextSecondary)
-                        .multilineTextAlignment(.center)
-                    Text(OnboardingQuotes.timeline)
-                        .font(NoorFont.caption)
-                        .italic()
-                        .foregroundStyle(Color.noorRoseGold.opacity(0.9))
-                        .multilineTextAlignment(.center)
-                        .padding(.top, 4)
-                }
-                TextField("e.g. June 2026", text: $timeline)
-                    .textFieldStyle(.plain)
-                    .font(NoorFont.body)
+        VStack(spacing: 0) {
+            Spacer()
+            
+            VStack(alignment: .leading, spacing: 16) {
+                Text("When do you want to arrive?")
+                    .font(NoorFont.largeTitle)
                     .foregroundStyle(.white)
-                    .padding(20)
-                    .background(Color.white.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .padding(.horizontal, 24)
-                OnboardingButton(title: "Next", action: onNext)
-                    .padding(.horizontal, NoorLayout.horizontalPadding)
+                
+                Text("A date makes it real.")
+                        .font(NoorFont.title)
+                        .foregroundStyle(Color.noorTextSecondary)
+                
+                Text(OnboardingQuotes.timeline)
+                    .font(NoorFont.title)
+                    .italic()
+                    .foregroundStyle(Color.noorRoseGold)
+                    .padding(.top, 4)
             }
-            .padding(NoorLayout.horizontalPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 24)
+            
+            TextField("e.g. June 2026", text: $timeline)
+                .textFieldStyle(.plain)
+                .font(NoorFont.title)
+                .foregroundStyle(.white)
+                .tint(Color.noorAccent)
+                .padding(20)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .focused($isFocused)
+            
+            Spacer()
+            
+            OnboardingTextButton(title: "Continue", action: onNext)
+                .padding(.bottom, 20)
         }
+        .padding(.horizontal, NoorLayout.horizontalPadding)
+        .onAppear { isFocused = true }
     }
 }
 
@@ -1113,70 +1355,96 @@ private struct OnboardingStoryInputView: View {
     let destination: String
     let selectedCategory: GoalCategory?
     let onNext: () -> Void
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 8) {
+            Spacer()
+            
+            VStack(alignment: .leading, spacing: 16) {
                 Text(selectedCategory?.storyPrompt ?? "Why does this matter to you?")
                     .font(NoorFont.largeTitle)
                     .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
+                
                 Text(OnboardingQuotes.story)
-                    .font(NoorFont.caption)
+                    .font(NoorFont.title)
                     .italic()
-                    .foregroundStyle(Color.noorRoseGold.opacity(0.9))
-                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Color.noorRoseGold)
             }
-            .padding(.top, 28)
-            .padding(.bottom, 16)
-            TextEditor(text: $userStory)
-                .scrollContentBackground(.hidden)
-                .font(NoorFont.body)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 24)
+            
+            TextField("Share your story...", text: $userStory, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(NoorFont.title)
                 .foregroundStyle(.white)
-                .frame(height: 100)
-                .padding(16)
-                .background(Color.white.opacity(0.1))
+                .tint(Color.noorAccent)
+                .lineLimit(1...6)
+                .padding(20)
+                .background(Color.white.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 16))
-            Spacer(minLength: 24)
-            OnboardingButton(title: "Book my itinerary", isDisabled: destination.isEmpty, action: onNext)
+                .focused($isFocused)
+            
+            Spacer()
+            
+            OnboardingTextButton(
+                title: "Book my itinerary",
+                isDisabled: destination.isEmpty,
+                action: onNext
+            )
+            .padding(.bottom, 20)
         }
-        .padding(NoorLayout.horizontalPadding)
+        .padding(.horizontal, NoorLayout.horizontalPadding)
+        .onAppear { isFocused = true }
     }
 }
 
 private struct OnboardingNameInputView: View {
     @Binding var userName: String
     let onNext: () -> Void
+    @FocusState private var isFocused: Bool
 
     var body: some View {
-        VStack(spacing: 32) {
+        VStack(spacing: 0) {
             Spacer()
-            VStack(spacing: 16) {
-                Text("What should we call you?")
+            
+            VStack(alignment: .leading, spacing: 16) {
+                Text("What's your name?")
                     .font(NoorFont.largeTitle)
                     .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                TextField("Your name", text: $userName)
-                    .textFieldStyle(.plain)
-                    .font(NoorFont.title)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .padding(20)
-                    .background(Color.white.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                
                 Text("We'll greet you each morning and track your journey.")
-                    .font(NoorFont.body)
+                    .font(NoorFont.title)
                     .foregroundStyle(Color.noorTextSecondary)
-                    .multilineTextAlignment(.center)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 24)
+            
+            TextField("Your name", text: $userName)
+                .textFieldStyle(.plain)
+                .font(NoorFont.title)
+                .foregroundStyle(.white)
+                .tint(Color.noorAccent)
+                .padding(20)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .focused($isFocused)
+            
             Spacer()
-            OnboardingButton(title: "Continue", isDisabled: userName.trimmingCharacters(in: .whitespaces).isEmpty, action: onNext)
+            
+            OnboardingTextButton(
+                title: "Continue",
+                isDisabled: userName.trimmingCharacters(in: .whitespaces).isEmpty,
+                action: onNext
+            )
+            .padding(.bottom, 20)
         }
-        .padding(NoorLayout.horizontalPadding)
+        .padding(.horizontal, NoorLayout.horizontalPadding)
+        .onAppear { isFocused = true }
     }
 }
 
-// MARK: - Centered layout for onboarding (consistent alignment)
+// MARK: - Centered layout
 private struct OnboardingCenteredLayout<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
@@ -1190,8 +1458,7 @@ private struct OnboardingCenteredLayout<Content: View>: View {
     }
 }
 
-// MARK: - Supporting Views
-
+// MARK: - OnboardingButton with neon pink glow when enabled
 struct OnboardingButton: View {
     let title: String
     var isDisabled: Bool = false
@@ -1201,21 +1468,47 @@ struct OnboardingButton: View {
         Button(action: action) {
             Text(title)
                 .font(NoorFont.button)
-                .foregroundStyle(isDisabled ? Color.noorTextSecondary.opacity(0.6) : Color.noorTextPrimary)
+                .foregroundStyle(isDisabled ? Color.noorTextSecondary.opacity(0.5) : .white)
                 .frame(maxWidth: .infinity)
                 .frame(height: NoorLayout.buttonHeight)
-                .background(Color.white.opacity(isDisabled ? 0.06 : 0.12))
+                .background(isDisabled ? Color.white.opacity(0.06) : Color.noorAccent)
                 .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
-                .overlay(
-                    RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge)
-                        .stroke(Color.white.opacity(isDisabled ? 0.15 : 0.3), lineWidth: 1)
+                .shadow(
+                    color: isDisabled ? .clear : Color.noorAccent.opacity(0.5),
+                    radius: isDisabled ? 0 : 16,
+                    x: 0,
+                    y: isDisabled ? 0 : 4
                 )
         }
         .disabled(isDisabled)
         .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.2), value: isDisabled)
     }
 }
 
+// MARK: - Text Link Style Button
+private struct OnboardingTextButton: View {
+    let title: String
+    var isDisabled: Bool = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(NoorFont.bodyLarge)
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 14, weight: .medium))
+            }
+            .foregroundStyle(isDisabled ? Color.noorTextSecondary.opacity(0.5) : Color.noorAccent)
+        }
+        .disabled(isDisabled)
+        .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.2), value: isDisabled)
+    }
+}
+
+// MARK: - Supporting Views
 struct CategorySelectionRow: View {
     let category: GoalCategory
     let isSelected: Bool
@@ -1241,8 +1534,12 @@ struct CategorySelectionRow: View {
                 }
             }
             .padding(16)
-            .background(isSelected ? Color.noorViolet.opacity(0.5) : Color.white.opacity(0.1))
+            .background(isSelected ? Color.noorAccent.opacity(0.3) : Color.white.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(isSelected ? Color.noorAccent : Color.clear, lineWidth: 2)
+            )
         }
         .buttonStyle(.plain)
     }
@@ -1252,28 +1549,32 @@ struct ItineraryChallengeRow: View {
     let number: Int
     let challenge: AIChallenge
     let isUnlocked: Bool
+    var isFirstUnlocked: Bool = false
 
     var body: some View {
         HStack(spacing: 16) {
+            // Number circle - green accent for first unlocked
             ZStack {
                 Circle()
-                    .fill(isUnlocked ? Color.noorViolet : Color.white.opacity(0.1))
+                    .fill(isFirstUnlocked ? Color.noorSuccess : (isUnlocked ? Color.white.opacity(0.15) : Color.white.opacity(0.08)))
                     .frame(width: 32, height: 32)
 
                 if isUnlocked {
                     Text("\(number)")
                         .font(NoorFont.callout)
-                        .foregroundStyle(.white)
+                        .fontWeight(isFirstUnlocked ? .bold : .regular)
+                        .foregroundStyle(isFirstUnlocked ? .white : Color.noorTextPrimary)
                 } else {
                     Image(systemName: "lock.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.noorTextSecondary.opacity(0.5))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.noorTextSecondary.opacity(0.4))
                 }
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(challenge.title)
                     .font(NoorFont.body)
+                    .fontWeight(isFirstUnlocked ? .semibold : .regular)
                     .foregroundStyle(isUnlocked ? .white : Color.noorTextSecondary.opacity(0.5))
 
                 if isUnlocked {
@@ -1284,15 +1585,26 @@ struct ItineraryChallengeRow: View {
 
                     Text(challenge.estimatedTime)
                         .font(NoorFont.caption)
-                        .foregroundStyle(Color.noorRoseGold)
+                        .foregroundStyle(isFirstUnlocked ? Color.noorSuccess : Color.noorTextSecondary.opacity(0.7))
                 }
             }
 
             Spacer()
+            
+            // Green arrow for first unlocked step
+            if isFirstUnlocked {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.noorSuccess)
+            }
         }
-        .padding(12)
-        .background(Color.white.opacity(0.05))
+        .padding(14)
+        .background(isFirstUnlocked ? Color.noorSuccess.opacity(0.1) : Color.white.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isFirstUnlocked ? Color.noorSuccess.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
     }
 }
 
@@ -1316,8 +1628,12 @@ struct GenderButton: View {
                 }
             }
             .padding(16)
-            .background(isSelected ? Color.noorViolet.opacity(0.5) : Color.white.opacity(0.1))
+            .background(isSelected ? Color.noorAccent.opacity(0.3) : Color.white.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(isSelected ? Color.noorAccent : Color.clear, lineWidth: 2)
+            )
         }
         .buttonStyle(.plain)
     }
@@ -1377,7 +1693,7 @@ private struct OnboardingAnnualPlanCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay(
             RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.noorRoseGold, lineWidth: 2)
+                .stroke(Color.noorAccent, lineWidth: 2)
         )
     }
 }
@@ -1400,14 +1716,14 @@ private struct OnboardingMonthlyPlanCard: View {
             Button(action: action) {
                 Text("Purchase Monthly Pass")
                     .font(NoorFont.button)
-                    .foregroundStyle(Color.noorViolet)
+                    .foregroundStyle(Color.noorAccent)
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
                     .background(Color.white)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.noorViolet, lineWidth: 2)
+                            .stroke(Color.noorAccent, lineWidth: 2)
                     )
             }
             .buttonStyle(.plain)

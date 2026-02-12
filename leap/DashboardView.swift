@@ -354,7 +354,7 @@ struct DashboardView: View {
                 .foregroundStyle(.white)
 
             Text(formattedDate)
-                .font(NoorFont.caption)
+                .font(NoorFont.body)
                 .foregroundStyle(Color.noorTextSecondary)
         }
     }
@@ -654,7 +654,7 @@ private struct FromYourVisionBlock: View {
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Act on it")
-                                .font(NoorFont.caption)
+                                .font(NoorFont.callout)
                                 .foregroundStyle(Color.noorTextSecondary)
                             Text(item.title)
                                 .font(NoorFont.body)
@@ -715,7 +715,7 @@ struct JourneyCard: View {
 
                     if !goal.timeline.isEmpty {
                         Text("Arrival: \(goal.timeline)")
-                            .font(NoorFont.caption)
+                            .font(NoorFont.callout)
                             .foregroundStyle(Color.noorTextSecondary)
                     }
                 }
@@ -757,7 +757,7 @@ struct JourneyCard: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Today's Mission")
-                            .font(NoorFont.caption)
+                            .font(NoorFont.callout)
                             .foregroundStyle(Color.noorTextSecondary)
 
                         Text(challenge.title)
@@ -795,7 +795,7 @@ struct JourneyCard: View {
                     .foregroundStyle(Color.noorAccent)
 
                 Text("\(remainingChallenges) of \(goal.dailyTasks.count) challenges left")
-                    .font(NoorFont.caption)
+                    .font(NoorFont.callout)
                     .foregroundStyle(Color.noorTextSecondary)
             }
         }
