@@ -33,6 +33,10 @@ final class Goal {
     // Challenges (sequential unlocking)
     @Relationship(inverse: \DailyTask.goal) var dailyTasks: [DailyTask] = []
 
+    // Archive
+    var isArchived: Bool = false
+    var archivedAt: Date?
+
     // Legacy support
     var targetDaysPerWeek: Int
     var isPremiumFeature: Bool = false
@@ -438,10 +442,10 @@ enum VisionItemKind: String, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .pinterest: return "Pinterest board"
-        case .instagram: return "Instagram post or profile"
-        case .destination: return "Place to travel"
-        case .action: return "Action / link"
+        case .pinterest: return "Pinterest"
+        case .instagram: return "Instagram"
+        case .destination: return "Destination"
+        case .action: return "Next step"
         }
     }
 

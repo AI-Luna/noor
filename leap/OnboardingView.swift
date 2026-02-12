@@ -48,7 +48,7 @@ struct OnboardingView: View {
             Color.noorBackground
                 .ignoresSafeArea()
 
-            // Screen content
+            // Screen content — .id(currentScreen) keeps identity stable so typing doesn't retrigger transition
             Group {
                 switch currentScreen {
                 case 1: splashScreen
@@ -60,17 +60,18 @@ struct OnboardingView: View {
                 case 7: identityShiftScreen
                 case 8: destinationSelectionScreen
                 case 9: scienceAfterDestinationScreen
-                case 10: destinationOnlyScreen
-                case 11: timelineOnlyScreen
-                case 12: storyOnlyScreen
+                case 10: OnboardingDestinationInputView(destination: $destination, selectedCategory: selectedCategory, onNext: { hapticLight(); advanceScreen() })
+                case 11: OnboardingTimelineInputView(timeline: $timeline, onNext: { hapticLight(); advanceScreen() })
+                case 12: OnboardingStoryInputView(userStory: $userStory, destination: destination, selectedCategory: selectedCategory, onNext: { hapticMedium(); advanceScreen(); generateItinerary() })
                 case 13: aiGenerationScreen
                 case 14: itineraryRevealScreen
                 case 15: genderSelectionScreen
-                case 16: nameInputScreen
+                case 16: OnboardingNameInputView(userName: $userName, onNext: { hapticLight(); advanceScreen() })
                 case 17: paywallScreen
                 default: splashScreen
                 }
             }
+            .id(currentScreen)
             .transition(.opacity.combined(with: .move(edge: .trailing)))
         }
     }
@@ -1022,6 +1023,156 @@ struct OnboardingView: View {
     private func hapticStrong() {
         let generator = UIImpactFeedbackGenerator(style: .heavy)
         generator.impactOccurred()
+    }
+}
+
+// MARK: - Text-input screens (extracted to avoid full onboarding re-render on every keystroke)
+private struct OnboardingDestinationInputView: View {
+    @Binding var destination: String
+    let selectedCategory: GoalCategory?
+    let onNext: () -> Void
+
+    var body: some View {
+        OnboardingCenteredLayout {
+            VStack(spacing: 28) {
+                VStack(spacing: 12) {
+                    Text(selectedCategory?.travelAgencyTitle ?? "What's your perfect destination?")
+                        .font(NoorFont.largeTitle)
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                    if selectedCategory == .travel {
+                        Text("This trip you've been pinning about for years—where is it?")
+                            .font(NoorFont.body)
+                            .foregroundStyle(Color.noorTextSecondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    Text(OnboardingQuotes.destination)
+                        .font(NoorFont.caption)
+                        .italic()
+                        .foregroundStyle(Color.noorRoseGold.opacity(0.9))
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 4)
+                }
+                TextField(selectedCategory?.destinationPlaceholder ?? "Your goal", text: $destination)
+                    .textFieldStyle(.plain)
+                    .font(NoorFont.body)
+                    .foregroundStyle(.white)
+                    .padding(20)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 24)
+                OnboardingButton(title: "Next", isDisabled: destination.trimmingCharacters(in: .whitespaces).isEmpty, action: onNext)
+                    .padding(.horizontal, NoorLayout.horizontalPadding)
+            }
+            .padding(NoorLayout.horizontalPadding)
+        }
+    }
+}
+
+private struct OnboardingTimelineInputView: View {
+    @Binding var timeline: String
+    let onNext: () -> Void
+
+    var body: some View {
+        OnboardingCenteredLayout {
+            VStack(spacing: 28) {
+                VStack(spacing: 12) {
+                    Text("When do you want to arrive?")
+                        .font(NoorFont.largeTitle)
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                    Text("A date makes it real.")
+                        .font(NoorFont.body)
+                        .foregroundStyle(Color.noorTextSecondary)
+                        .multilineTextAlignment(.center)
+                    Text(OnboardingQuotes.timeline)
+                        .font(NoorFont.caption)
+                        .italic()
+                        .foregroundStyle(Color.noorRoseGold.opacity(0.9))
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 4)
+                }
+                TextField("e.g. June 2026", text: $timeline)
+                    .textFieldStyle(.plain)
+                    .font(NoorFont.body)
+                    .foregroundStyle(.white)
+                    .padding(20)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 24)
+                OnboardingButton(title: "Next", action: onNext)
+                    .padding(.horizontal, NoorLayout.horizontalPadding)
+            }
+            .padding(NoorLayout.horizontalPadding)
+        }
+    }
+}
+
+private struct OnboardingStoryInputView: View {
+    @Binding var userStory: String
+    let destination: String
+    let selectedCategory: GoalCategory?
+    let onNext: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 8) {
+                Text(selectedCategory?.storyPrompt ?? "Why does this matter to you?")
+                    .font(NoorFont.largeTitle)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                Text(OnboardingQuotes.story)
+                    .font(NoorFont.caption)
+                    .italic()
+                    .foregroundStyle(Color.noorRoseGold.opacity(0.9))
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.top, 28)
+            .padding(.bottom, 16)
+            TextEditor(text: $userStory)
+                .scrollContentBackground(.hidden)
+                .font(NoorFont.body)
+                .foregroundStyle(.white)
+                .frame(height: 100)
+                .padding(16)
+                .background(Color.white.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+            Spacer(minLength: 24)
+            OnboardingButton(title: "Book my itinerary", isDisabled: destination.isEmpty, action: onNext)
+        }
+        .padding(NoorLayout.horizontalPadding)
+    }
+}
+
+private struct OnboardingNameInputView: View {
+    @Binding var userName: String
+    let onNext: () -> Void
+
+    var body: some View {
+        VStack(spacing: 32) {
+            Spacer()
+            VStack(spacing: 16) {
+                Text("What should we call you?")
+                    .font(NoorFont.largeTitle)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                TextField("Your name", text: $userName)
+                    .textFieldStyle(.plain)
+                    .font(NoorFont.title)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(20)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                Text("We'll greet you each morning and track your journey.")
+                    .font(NoorFont.body)
+                    .foregroundStyle(Color.noorTextSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            Spacer()
+            OnboardingButton(title: "Continue", isDisabled: userName.trimmingCharacters(in: .whitespaces).isEmpty, action: onNext)
+        }
+        .padding(NoorLayout.horizontalPadding)
     }
 }
 

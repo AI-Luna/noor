@@ -64,7 +64,49 @@ final class DataManager {
         let descriptor = FetchDescriptor<Goal>(
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
-        return try ctx.fetch(descriptor)
+        return try ctx.fetch(descriptor).filter { !$0.isArchived }
+    }
+
+    func fetchArchivedGoals() async throws -> [Goal] {
+        let ctx = try requireContext()
+        let descriptor = FetchDescriptor<Goal>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        return try ctx.fetch(descriptor).filter { $0.isArchived }
+    }
+
+    func archiveGoal(_ id: String) async throws {
+        guard let uuid = UUID(uuidString: id) else {
+            throw DataManagerError.invalidID(id)
+        }
+        let ctx = try requireContext()
+        let descriptor = FetchDescriptor<Goal>(
+            predicate: #Predicate<Goal> { $0.id == uuid }
+        )
+        let goals = try ctx.fetch(descriptor)
+        guard let goal = goals.first else {
+            throw DataManagerError.notFound("Goal", id: id)
+        }
+        goal.isArchived = true
+        goal.archivedAt = Date()
+        try ctx.save()
+    }
+
+    func unarchiveGoal(_ id: String) async throws {
+        guard let uuid = UUID(uuidString: id) else {
+            throw DataManagerError.invalidID(id)
+        }
+        let ctx = try requireContext()
+        let descriptor = FetchDescriptor<Goal>(
+            predicate: #Predicate<Goal> { $0.id == uuid }
+        )
+        let goals = try ctx.fetch(descriptor)
+        guard let goal = goals.first else {
+            throw DataManagerError.notFound("Goal", id: id)
+        }
+        goal.isArchived = false
+        goal.archivedAt = nil
+        try ctx.save()
     }
 
     func deleteGoal(_ id: String) async throws {

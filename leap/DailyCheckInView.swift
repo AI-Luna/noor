@@ -110,9 +110,9 @@ struct DailyCheckInView: View {
         VStack(alignment: .leading, spacing: 16) {
             // Category icon and label
             HStack(spacing: 12) {
-                Image(systemName: iconForCategory(displayGoal.category))
+                Image(systemName: "cloud.fill")
                     .font(.system(size: 32))
-                    .foregroundStyle(Color.noorRoseGold)
+                    .foregroundStyle(.white)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(GoalCategory(rawValue: displayGoal.category)?.shortName ?? displayGoal.category)

@@ -15,7 +15,8 @@ extension Color {
     static let noorViolet = Color(hex: "9333EA")       // Primary gradient mid
     static let noorOrange = Color(hex: "F97316")       // Primary gradient end
     static let noorAccent = Color(hex: "FF2D75")       // Pink/magenta for CTAs
-    static let noorRoseGold = Color(hex: "D4AF37")     // Icons and highlights
+    static let noorRoseGold = Color(hex: "DD8625")     // Icons and highlights (warm amber)
+    static let noorAmber = Color(hex: "DD8625")         // Warm amber for habits
     static let noorSuccess = Color(hex: "10B981")      // Green - completions
     static let noorBackground = Color(hex: "0F0A1E")   // Deep purple-black
 

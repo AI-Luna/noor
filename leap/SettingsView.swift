@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var showPaywall = false
     @State private var isRestoring = false
     @State private var showRestoredAlert = false
+    @State private var showRestartOnboardingConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -27,6 +28,19 @@ struct SettingsView: View {
                             Text("\(store.streak) days")
                                 .foregroundStyle(Color.noorCharcoal.opacity(0.8))
                         }
+                        .listRowBackground(Color.white)
+                    }
+
+                    Section {
+                        Button {
+                            showRestartOnboardingConfirmation = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "arrow.counterclockwise")
+                                Text("Restart onboarding")
+                            }
+                        }
+                        .foregroundStyle(Color.noorCharcoal)
                         .listRowBackground(Color.white)
                     }
 
@@ -87,6 +101,14 @@ struct SettingsView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(purchaseManager.isPro ? "Pro access restored." : "No active subscription found.")
+            }
+            .alert("Restart onboarding?", isPresented: $showRestartOnboardingConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Restart", role: .destructive) {
+                    UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+                }
+            } message: {
+                Text("You'll see the onboarding flow again. The app will restart to the first screen.")
             }
         }
     }

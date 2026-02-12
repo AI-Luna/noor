@@ -16,6 +16,8 @@ struct ProfileView: View {
     @State private var showRestoredAlert = false
     @State private var totalGoals: Int = 0
     @State private var completedChallenges: Int = 0
+    @State private var showArchives = false
+    @State private var showRestartOnboardingConfirmation = false
 
     private var userName: String {
         UserDefaults.standard.string(forKey: "userName") ?? "Traveler"
@@ -37,6 +39,19 @@ struct ProfileView: View {
                         statsSection
                         subscriptionSection
                         aboutSection
+
+                        // Restart onboarding — faint, at very bottom
+                        Button {
+                            showRestartOnboardingConfirmation = true
+                        } label: {
+                            Text("Restart onboarding")
+                                .font(NoorFont.caption)
+                                .foregroundStyle(Color.noorTextSecondary.opacity(0.5))
+                        }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 32)
+                        .padding(.bottom, 24)
                     }
                     .padding(20)
                     .padding(.bottom, 16)
@@ -52,6 +67,10 @@ struct ProfileView: View {
                 }
             }
             .onAppear { loadStats() }
+            .navigationDestination(isPresented: $showArchives) {
+                ArchivedDreamsView()
+                    .environment(dataManager)
+            }
             .sheet(isPresented: $showPaywall) {
                 PaywallView(onDismiss: { showPaywall = false })
             }
@@ -59,6 +78,14 @@ struct ProfileView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(purchaseManager.isPro ? "Pro access restored." : "No active subscription found.")
+            }
+            .alert("Restart onboarding?", isPresented: $showRestartOnboardingConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Restart", role: .destructive) {
+                    UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+                }
+            } message: {
+                Text("You'll see the onboarding flow again.")
             }
         }
     }
@@ -116,8 +143,8 @@ struct ProfileView: View {
                 )
 
                 StatCard(
-                    icon: "airplane",
-                    iconColor: Color.noorRoseGold,
+                    icon: "airplane.departure",
+                    iconColor: Color.noorAccent,
                     value: "\(totalGoals)",
                     label: "Flights Booked"
                 )
@@ -126,7 +153,7 @@ struct ProfileView: View {
                     icon: "checkmark.circle.fill",
                     iconColor: Color.noorSuccess,
                     value: "\(completedChallenges)",
-                    label: "Missions\nComplete"
+                    label: "Habits Done"
                 )
             }
         }
@@ -236,6 +263,9 @@ struct ProfileView: View {
                 .foregroundStyle(.white)
 
             VStack(spacing: 0) {
+                linkRow(title: "Archives", icon: "archivebox") {
+                    showArchives = true
+                }
                 linkRow(title: "Contact Support", icon: "envelope") {
                     if let url = URL(string: "mailto:luna.app.studio@gmail.com") {
                         UIApplication.shared.open(url)

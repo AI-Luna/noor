@@ -13,6 +13,7 @@ struct ContentView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
     @State private var showPurchaseErrorAlert = false
     @State private var hasCreatedFirstGoal = false
+    @State private var selectedTab: Int = 0
 
     var body: some View {
         ZStack {
@@ -22,25 +23,34 @@ struct ContentView: View {
                     createFirstGoalFromOnboarding()
                 })
             } else {
-                TabView {
+                TabView(selection: $selectedTab) {
                     DashboardView()
                         .tabItem {
                             Label("Home", systemImage: "airplane")
                         }
+                        .tag(0)
                     ProgressTabView()
                         .tabItem {
                             Label("Progress", systemImage: "flame.fill")
                         }
+                        .tag(1)
                     VisionView()
                         .tabItem {
                             Label("Vision", systemImage: "eye.fill")
                         }
+                        .tag(2)
                     MicrohabitsView()
                         .tabItem {
                             Label("Habits", systemImage: "leaf.fill")
                         }
+                        .tag(3)
                 }
                 .tint(Color.noorAccent)
+                .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("switchToTab"))) { notification in
+                    if let tab = notification.object as? Int {
+                        selectedTab = tab
+                    }
+                }
                 .onChange(of: purchaseManager.errorMessage) { _, newValue in
                     showPurchaseErrorAlert = (newValue != nil && !(newValue?.isEmpty ?? true))
                 }

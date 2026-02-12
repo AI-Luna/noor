@@ -186,9 +186,9 @@ private struct FlightRowCard: View {
                     .fill(isComplete ? Color.noorSuccess.opacity(0.2) : Color.noorViolet.opacity(0.3))
                     .frame(width: 48, height: 48)
 
-                Image(systemName: iconForCategory(goal.category))
+                Image(systemName: "cloud.fill")
                     .font(.system(size: 20))
-                    .foregroundStyle(isComplete ? Color.noorSuccess : Color.noorRoseGold)
+                    .foregroundStyle(.white)
             }
 
             VStack(alignment: .leading, spacing: 6) {
