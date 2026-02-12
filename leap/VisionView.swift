@@ -500,9 +500,9 @@ private struct AddVisionItemSheet: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Header (no X button - swipe to dismiss)
-                HStack(alignment: .center) {
-                    if currentStep == 1 {
+                // Header — back button only on step 1
+                if currentStep == 1 {
+                    HStack(alignment: .center) {
                         Button {
                             withAnimation(.easeInOut(duration: 0.25)) {
                                 currentStep = 0
@@ -513,37 +513,42 @@ private struct AddVisionItemSheet: View {
                                 .foregroundStyle(Color.noorTextSecondary)
                         }
                         .buttonStyle(.plain)
+
+                        Text(kind.displayName)
+                            .font(NoorFont.largeTitle)
+                            .foregroundStyle(.white)
+                        Spacer()
                     }
-                    
-                    Text(currentStep == 0 ? "Add to your vision" : kind.displayName)
-                        .font(NoorFont.title)
-                        .foregroundStyle(.white)
-                    Spacer()
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    .padding(.bottom, 10)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-                .padding(.bottom, 12)
 
                 // Step content with slide animation
                 ZStack {
                     // Step 0: Choose type
                     if currentStep == 0 {
                         VStack(alignment: .leading, spacing: 0) {
-                            // Mission text
-                            Text("Save a visual, link, or destination that moves you to act.")
-                                .font(NoorFont.body)
-                                .foregroundStyle(Color.noorTextSecondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.bottom, 28)
-
-                            // Section: What type of vision item
-                            VStack(alignment: .leading, spacing: 16) {
-                                Text("What are you saving?")
-                                    .font(NoorFont.title2)
+                            // Header + subtext together
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Make your vision real.")
+                                    .font(NoorFont.largeTitle)
                                     .foregroundStyle(.white)
-                                
-                                Text("A board, post, place, or action you'll return to.")
-                                    .font(NoorFont.caption)
+
+                                Text("Your vision only works when you act on it. Save what inspires you — Noor turns it into your next move.")
+                                    .font(NoorFont.bodyLarge)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                            }
+                            .padding(.bottom, 32)
+
+                            // Section: What type
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("What are you adding?")
+                                    .font(NoorFont.title)
+                                    .foregroundStyle(.white)
+
+                                Text("A board, post, destination, or action step.")
+                                    .font(NoorFont.bodyLarge)
                                     .foregroundStyle(Color.noorTextSecondary)
                             }
                             .padding(.bottom, 24)
@@ -559,22 +564,27 @@ private struct AddVisionItemSheet: View {
                                     }
                                 }
                             }
-                            .padding(.bottom, 24)
 
-                            // Next arrow to continue to details
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.25)) {
-                                    currentStep = 1
+                            Spacer()
+
+                            // Next arrow — bottom right, thumb-friendly
+                            HStack {
+                                Spacer()
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        currentStep = 1
+                                    }
+                                } label: {
+                                    Image(systemName: "arrow.right.circle.fill")
+                                        .font(.system(size: 52))
+                                        .foregroundStyle(Color.noorRoseGold)
                                 }
-                            } label: {
-                                Image(systemName: "arrow.right.circle.fill")
-                                    .font(.system(size: 44))
-                                    .foregroundStyle(Color.noorRoseGold)
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
+                            .padding(.bottom, 32)
                         }
                         .padding(.horizontal, 20)
-                        .padding(.top, 16)
+                        .padding(.top, 24)
                         .transition(.asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .leading)))
                     }
 
@@ -585,7 +595,7 @@ private struct AddVisionItemSheet: View {
                                 if kind == .pinterest {
                                     VStack(alignment: .leading, spacing: 10) {
                                         Text("Board or pin link")
-                                            .font(NoorFont.caption)
+                                            .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                         TextField("pinterest.com/... or pin.it/...", text: $url)
                                             .textFieldStyle(.plain)
@@ -606,7 +616,7 @@ private struct AddVisionItemSheet: View {
                                             .clipShape(RoundedRectangle(cornerRadius: 16))
 
                                         Text("We'll open this board when you tap it from your vision.")
-                                            .font(NoorFont.caption)
+                                            .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                     }
                                 }
@@ -614,7 +624,7 @@ private struct AddVisionItemSheet: View {
                                 if kind == .instagram {
                                     VStack(alignment: .leading, spacing: 10) {
                                         Text("Post or profile link")
-                                            .font(NoorFont.caption)
+                                            .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                         TextField("instagram.com/p/... or @handle", text: $url)
                                             .textFieldStyle(.plain)
@@ -635,7 +645,7 @@ private struct AddVisionItemSheet: View {
                                             .clipShape(RoundedRectangle(cornerRadius: 16))
 
                                         Text("We'll open this post when you tap it from your vision.")
-                                            .font(NoorFont.caption)
+                                            .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                     }
                                 }
@@ -643,7 +653,7 @@ private struct AddVisionItemSheet: View {
                                 if kind == .destination {
                                     VStack(alignment: .leading, spacing: 10) {
                                         Text("City or country")
-                                            .font(NoorFont.caption)
+                                            .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                         TextField("e.g. Iceland, Tokyo, Bali", text: $placeName)
                                             .textFieldStyle(.plain)
@@ -662,7 +672,7 @@ private struct AddVisionItemSheet: View {
                                             .clipShape(RoundedRectangle(cornerRadius: 16))
 
                                         Text("We'll help you search flights when you're ready to book.")
-                                            .font(NoorFont.caption)
+                                            .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                     }
                                 }
@@ -671,7 +681,7 @@ private struct AddVisionItemSheet: View {
                                     VStack(alignment: .leading, spacing: 10) {
                                         VStack(alignment: .leading, spacing: 8) {
                                             Text("Common actions (optional)")
-                                                .font(NoorFont.caption)
+                                                .font(NoorFont.bodyLarge)
                                                 .foregroundStyle(Color.noorTextSecondary)
                                             Picker("Idea", selection: $actionSuggestion) {
                                                 ForEach(VisionActionSuggestion.allCases, id: \.self) { s in
@@ -689,7 +699,7 @@ private struct AddVisionItemSheet: View {
                                         }
 
                                         Text("Name your next step")
-                                            .font(NoorFont.caption)
+                                            .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                         TextField("e.g. Update LinkedIn, DM Sarah", text: $title)
                                             .textFieldStyle(.plain)
@@ -700,7 +710,7 @@ private struct AddVisionItemSheet: View {
                                             .clipShape(RoundedRectangle(cornerRadius: 16))
 
                                         Text("Link to open (booking page, profile, purchase)")
-                                            .font(NoorFont.caption)
+                                            .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                         TextField("https://...", text: $url)
                                             .textFieldStyle(.plain)
@@ -713,19 +723,19 @@ private struct AddVisionItemSheet: View {
                                             .keyboardType(.URL)
 
                                         Text("We'll open this link when you tap it from your vision.")
-                                            .font(NoorFont.caption)
+                                            .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                     }
                                 }
 
                                 // Link to journey (if goals exist)
                                 if !goals.isEmpty {
-                                    VStack(alignment: .leading, spacing: 8) {
+                                    VStack(alignment: .leading, spacing: 10) {
                                         Text("Link to journey (optional)")
-                                            .font(NoorFont.title2)
+                                            .font(NoorFont.title)
                                             .foregroundStyle(.white)
                                         Text("Connect this to one of your visions or goals.")
-                                            .font(NoorFont.caption)
+                                            .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                         Picker("Journey", selection: $selectedGoalID) {
                                             Text("None").tag(nil as String?)

@@ -62,7 +62,7 @@ struct OnboardingView: View {
     @State private var backgroundIsDark: Bool = false
     @State private var starIsWhite: Bool = false
     @State private var showDarkOverlay: Bool = false
-    @State private var darkOverlayOffset: CGFloat = -UIScreen.main.bounds.height
+    @State private var darkOverlayOffset: CGFloat = -2000
 
     @Environment(PurchaseManager.self) private var purchaseManager
     
@@ -261,16 +261,18 @@ struct OnboardingView: View {
             // Bottom controls (only show after first page)
             if introPage > 0 {
                 VStack(spacing: 20) {
-                    // Page indicator
-                    HStack(spacing: 8) {
-                        ForEach(0..<introPages.count, id: \.self) { index in
-                            Capsule()
-                                .fill(index == introPage ? Color.noorAccent : Color.white.opacity(0.3))
-                                .frame(width: index == introPage ? 24 : 8, height: 8)
-                                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: introPage)
+                    // Page indicator (hide on final page)
+                    if introPage < introPages.count - 1 {
+                        HStack(spacing: 8) {
+                            ForEach(0..<introPages.count, id: \.self) { index in
+                                Capsule()
+                                    .fill(index == introPage ? Color.noorAccent : Color.white.opacity(0.3))
+                                    .frame(width: index == introPage ? 24 : 8, height: 8)
+                                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: introPage)
+                            }
                         }
                     }
-                    
+
                     // Continue button - brighter on final screen
                     Button {
                         hapticLight()
@@ -637,76 +639,110 @@ struct OnboardingView: View {
     }
 
     // MARK: - Screen 12: Paywall
+    private var annualPackage: RevenueCat.Package? {
+        purchaseManager.currentOffering?.availablePackages.first { $0.packageType == .annual }
+    }
+
+    private var monthlyPackage: RevenueCat.Package? {
+        purchaseManager.currentOffering?.availablePackages.first { $0.packageType == .monthly }
+    }
+
     private var paywallScreen: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 20) {
-                    VStack(spacing: 12) {
-                        Image(systemName: "airplane.departure")
-                            .font(.system(size: 40))
-                            .foregroundStyle(Color.noorAccent)
+        ZStack {
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(spacing: 20) {
+                        VStack(spacing: 12) {
+                            Image(systemName: "airplane.departure")
+                                .font(.system(size: 40))
+                                .foregroundStyle(Color.noorAccent)
 
-                        Text("Your ticket is ready.")
-                            .font(NoorFont.hero)
-                            .foregroundStyle(.white)
-                            .multilineTextAlignment(.center)
+                            Text("Your ticket is ready.")
+                                .font(NoorFont.hero)
+                                .foregroundStyle(.white)
+                                .multilineTextAlignment(.center)
 
-                        Rectangle()
-                            .fill(Color.noorAccent.opacity(0.5))
-                            .frame(width: 60, height: 1)
-                    }
-                    .padding(.top, 24)
-
-                    OnboardingAnnualPlanCard {
-                        purchaseAnnual()
-                    }
-
-                    OnboardingMonthlyPlanCard {
-                        purchaseMonthly()
-                    }
-
-                    VStack(spacing: 8) {
-                        Button("Restore Purchases") {
-                            restorePurchases()
+                            Rectangle()
+                                .fill(Color.noorAccent.opacity(0.5))
+                                .frame(width: 60, height: 1)
                         }
-                        .font(NoorFont.callout)
-                        .foregroundStyle(Color.noorTextSecondary)
-                        
-                        Text("The woman who lives that life invests in herself.")
+                        .padding(.top, 24)
+
+                        OnboardingAnnualPlanCard(
+                            priceString: annualPackage?.localizedPriceString ?? "$39.99",
+                            action: { purchaseAnnual() }
+                        )
+
+                        OnboardingMonthlyPlanCard(
+                            priceString: monthlyPackage?.localizedPriceString ?? "$14.99",
+                            action: { purchaseMonthly() }
+                        )
+
+                        VStack(spacing: 8) {
+                            Button("Restore Purchases") {
+                                restorePurchases()
+                            }
+                            .font(NoorFont.callout)
+                            .foregroundStyle(Color.noorTextSecondary)
+
+                            if let error = purchaseManager.errorMessage {
+                                Text(error)
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorCoral)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal)
+                            }
+
+                            Text("The woman who lives that life invests in herself.")
+                                .font(NoorFont.caption)
+                                .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
+                                .italic()
+                                .padding(.top, 4)
+
+                            Button("Skip for now") {
+                                saveUserAndComplete()
+                            }
                             .font(NoorFont.caption)
                             .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
-                            .italic()
-                            .padding(.top, 4)
+                            .padding(.top, 8)
 
-                        Button("Skip for now") {
-                            saveUserAndComplete()
-                        }
-                        .font(NoorFont.caption)
-                        .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
-                        .padding(.top, 8)
-
-                        HStack(spacing: 16) {
-                            Button("Terms & Conditions") {
-                                if let url = URL(string: "https://noor-website-virid.vercel.app/terms/") {
-                                    UIApplication.shared.open(url)
+                            HStack(spacing: 16) {
+                                Button("Terms & Conditions") {
+                                    if let url = URL(string: "https://noor-website-virid.vercel.app/terms/") {
+                                        UIApplication.shared.open(url)
+                                    }
                                 }
-                            }
-                                .font(NoorFont.caption)
-                                .foregroundStyle(Color.noorTextSecondary.opacity(0.7))
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary.opacity(0.7))
 
-                            Button("Privacy Policy") {
-                                if let url = URL(string: "https://noor-website-virid.vercel.app/privacy/") {
-                                    UIApplication.shared.open(url)
+                                Button("Privacy Policy") {
+                                    if let url = URL(string: "https://noor-website-virid.vercel.app/privacy/") {
+                                        UIApplication.shared.open(url)
+                                    }
                                 }
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary.opacity(0.7))
                             }
-                                .font(NoorFont.caption)
-                                .foregroundStyle(Color.noorTextSecondary.opacity(0.7))
                         }
+                        .padding(.top, 12)
+                        .padding(.bottom, 20)
                     }
-                    .padding(.top, 12)
-                    .padding(.bottom, 20)
+                    .padding(NoorLayout.horizontalPadding)
                 }
-                .padding(NoorLayout.horizontalPadding)
+            }
+
+            // Loading overlay during purchase
+            if purchaseManager.isLoading {
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+                ProgressView()
+                    .scaleEffect(1.2)
+                    .tint(.white)
+            }
+        }
+        .onAppear {
+            if purchaseManager.currentOffering == nil {
+                Task { await purchaseManager.loadOfferings() }
             }
         }
     }
@@ -781,9 +817,9 @@ struct OnboardingView: View {
         let profile = UserProfile(
             name: userName,
             gender: userGender,
-            hasSubscription: true,
-            subscriptionType: .annual,
-            freeGoalsRemaining: 3,
+            hasSubscription: purchaseManager.isPro,
+            subscriptionType: purchaseManager.isPro ? .annual : nil,
+            freeGoalsRemaining: purchaseManager.isPro ? 3 : 1,
             streak: 0,
             lastActionDate: nil,
             onboardingCompleted: true,
@@ -845,163 +881,167 @@ struct OnboardingView: View {
 // MARK: - Typewriter Intro Page (First Page with Special Animation)
 private struct TypewriterIntroPageView: View {
     let onContinue: () -> Void
-    
+
     // Reveal animation states
     @State private var revealProgress: CGFloat = 0
     @State private var hasStartedTypewriter: Bool = false
-    
+
     // Phase tracking
     // 0: Typing "Welcome to Noor"
     // 1: Deleting "Welcome to Noor"
-    // 2: Typing "Built on Motivation"
-    // 3: Strikethrough "Motivation"
-    // 4: Typing "Behavioral Science"
-    // 5: Show rest of content
+    // 2: Typing "Built on "
+    // 3: Typing "motivation"
+    // 4: Strikethrough "motivation" (stays visible, crossed out)
+    // 5: Typing "behavioral science." below
+    // 6: Show rest of content
     @State private var phase: Int = 0
-    
+
     // Text states
     @State private var welcomeText: String = ""
     @State private var builtOnText: String = ""
-    @State private var showMotivation: Bool = false
+    @State private var motivationText: String = ""
     @State private var strikethroughProgress: CGFloat = 0
+    @State private var motivationFaded: Bool = false
     @State private var behavioralScienceText: String = ""
     @State private var showCursor: Bool = true
     @State private var cursorTimer: Timer?
-    
+
     // Content fade states
     @State private var subtextOpacity: Double = 0
     @State private var buttonOpacity: Double = 0
     @State private var dotsOpacity: Double = 0
-    
+
     private let fullWelcome = "Welcome to Noor"
     private let builtOnFull = "Built on "
-    private let motivationWord = "Motivation"
-    private let behavioralScienceFull = "Behavioral Science"
-    private let screenHeight = UIScreen.main.bounds.height
-    
+    private let motivationFull = "motivation."
+    private let behavioralScienceFull = "behavioral science."
+
     var body: some View {
-        ZStack {
-            VStack(spacing: 0) {
-                Spacer()
-                
-                VStack(spacing: 32) {
-                    // Main text area
-                    VStack(spacing: 16) {
-                        // Phase 0-1: "Welcome to Noor"
-                        if phase < 2 {
+        GeometryReader { geo in
+            ZStack {
+                VStack(spacing: 0) {
+                    Spacer()
+
+                    // Main text area - fixed position, no layout shifts
+                    VStack(alignment: .leading, spacing: 0) {
+                        ZStack(alignment: .topLeading) {
+                            // Phase 0-1: "Welcome to Noor" (same position as built-on text)
                             HStack(spacing: 0) {
                                 Text(welcomeText)
                                     .font(NoorFont.hero)
                                     .foregroundStyle(.white)
-                                
-                                if showCursor && hasStartedTypewriter {
+
+                                if showCursor && hasStartedTypewriter && phase < 2 {
                                     Rectangle()
                                         .fill(Color.noorAccent)
                                         .frame(width: 3, height: 40)
                                 }
                             }
-                            .frame(height: 50)
-                        }
-                        
-                        // Phase 2+: "Built on Motivation" -> "Behavioral Science"
-                        if phase >= 2 {
-                            VStack(spacing: 12) {
-                                // "Built on" + Motivation/Behavioral Science
+                            .opacity(phase < 2 ? 1 : 0)
+
+                            // Phase 2+: "Built on motivation" -> strikethrough -> "behavioral science."
+                            VStack(alignment: .leading, spacing: 6) {
+                                // Line 1: "Built on motivation." with strikethrough
                                 HStack(spacing: 0) {
                                     Text(builtOnText)
                                         .font(NoorFont.largeTitle)
                                         .foregroundStyle(.white)
-                                    
-                                    // Motivation with strikethrough
-                                    if showMotivation {
-                                        ZStack {
-                                            Text(motivationWord)
+
+                                    // motivation typed then struck through
+                                    if !motivationText.isEmpty {
+                                        ZStack(alignment: .leading) {
+                                            Text(motivationText)
                                                 .font(NoorFont.largeTitle)
-                                                .foregroundStyle(strikethroughProgress > 0 ? Color.noorTextSecondary.opacity(0.5) : .white)
-                                            
+                                                .foregroundStyle(motivationFaded ? Color.noorTextSecondary.opacity(0.4) : .white)
+
                                             // Strikethrough line
-                                            GeometryReader { geo in
+                                            GeometryReader { textGeo in
                                                 Rectangle()
                                                     .fill(Color.noorAccent)
-                                                    .frame(width: geo.size.width * strikethroughProgress, height: 3)
-                                                    .offset(y: geo.size.height / 2 - 1.5)
+                                                    .frame(width: textGeo.size.width * strikethroughProgress, height: 3)
+                                                    .offset(y: textGeo.size.height / 2 - 1.5)
                                             }
                                         }
                                         .fixedSize()
                                     }
-                                    
-                                    // Behavioral Science (typed in after strikethrough)
-                                    if phase >= 4 && !behavioralScienceText.isEmpty {
-                                        Text(behavioralScienceText)
-                                            .font(NoorFont.largeTitle)
-                                            .foregroundStyle(Color.noorAccent)
-                                            .fontWeight(.bold)
-                                    }
-                                    
-                                    // Cursor during typing phases
-                                    if showCursor && (phase == 2 || phase == 4) {
+
+                                    // Cursor while typing "Built on " or "motivation"
+                                    if showCursor && (phase == 2 || phase == 3) {
                                         Rectangle()
                                             .fill(Color.noorAccent)
                                             .frame(width: 3, height: 32)
                                     }
                                 }
+
+                                // Line 2: "behavioral science." typed in after strikethrough
+                                HStack(spacing: 0) {
+                                    Text(behavioralScienceText)
+                                        .font(NoorFont.largeTitle)
+                                        .foregroundStyle(Color.noorAccent)
+                                        .fontWeight(.bold)
+
+                                    if showCursor && phase == 5 {
+                                        Rectangle()
+                                            .fill(Color.noorAccent)
+                                            .frame(width: 3, height: 32)
+                                    }
+                                }
+                                .opacity(behavioralScienceText.isEmpty ? 0 : 1)
+                            }
+                            .opacity(phase >= 2 ? 1 : 0)
+                        }
+
+                        // Subtext - always in layout, opacity controlled
+                        Text("Designed around how your brain builds habits through attention, action, and reward.")
+                            .font(NoorFont.bodyLarge)
+                            .foregroundStyle(Color.noorTextSecondary)
+                            .multilineTextAlignment(.leading)
+                            .opacity(subtextOpacity)
+                            .padding(.top, 16)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, NoorLayout.horizontalPadding)
+
+                    Spacer()
+
+                    // Bottom controls
+                    VStack(spacing: 20) {
+                        HStack(spacing: 8) {
+                            ForEach(0..<6, id: \.self) { index in
+                                Capsule()
+                                    .fill(index == 0 ? Color.noorAccent : Color.white.opacity(0.3))
+                                    .frame(width: index == 0 ? 24 : 8, height: 8)
                             }
                         }
-                        
-                        // Subtext after animation completes - one seamless statement
-                        if phase >= 5 {
-                            Text("Designed around how your brain builds habits through attention, action, and reward.")
-                                .font(NoorFont.bodyLarge)
-                                .foregroundStyle(Color.noorTextSecondary)
-                                .multilineTextAlignment(.center)
-                                .opacity(subtextOpacity)
-                                .padding(.top, 16)
-                                .padding(.horizontal, 8)
+                        .opacity(dotsOpacity)
+
+                        Button {
+                            onContinue()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text("Continue")
+                                    .font(NoorFont.bodyLarge)
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .foregroundStyle(Color.noorAccent)
                         }
+                        .buttonStyle(.plain)
+                        .opacity(buttonOpacity)
                     }
-                    .frame(minHeight: 200)
+                    .padding(.bottom, 40)
                 }
-                .padding(.horizontal, NoorLayout.horizontalPadding)
-                
-                Spacer()
-                
-                // Bottom controls
-                VStack(spacing: 20) {
-                    HStack(spacing: 8) {
-                        ForEach(0..<6, id: \.self) { index in
-                            Capsule()
-                                .fill(index == 0 ? Color.noorAccent : Color.white.opacity(0.3))
-                                .frame(width: index == 0 ? 24 : 8, height: 8)
-                        }
+                .mask(
+                    VStack(spacing: 0) {
+                        Rectangle()
+                            .frame(height: geo.size.height * revealProgress)
+                        Spacer(minLength: 0)
                     }
-                    .opacity(dotsOpacity)
-                    
-                    Button {
-                        onContinue()
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text("Continue")
-                                .font(NoorFont.bodyLarge)
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: 14, weight: .medium))
-                        }
-                        .foregroundStyle(Color.noorAccent)
-                    }
-                    .buttonStyle(.plain)
-                    .opacity(buttonOpacity)
-                }
-                .padding(.bottom, 40)
+                )
             }
-            .mask(
-                VStack(spacing: 0) {
-                    Rectangle()
-                        .frame(height: screenHeight * revealProgress)
-                    Spacer(minLength: 0)
-                }
-            )
         }
+        .ignoresSafeArea()
         .onAppear {
-            // Only start if we haven't already
             if !hasStartedTypewriter && revealProgress == 0 {
                 startRevealAnimation()
             }
@@ -1010,48 +1050,48 @@ private struct TypewriterIntroPageView: View {
             cursorTimer?.invalidate()
         }
     }
-    
+
     private func startRevealAnimation() {
-        // Reset all state to prevent accumulation bugs
         phase = 0
         welcomeText = ""
         builtOnText = ""
-        showMotivation = false
+        motivationText = ""
         strikethroughProgress = 0
+        motivationFaded = false
         behavioralScienceText = ""
         subtextOpacity = 0
         buttonOpacity = 0
         dotsOpacity = 0
-        
+
         withAnimation(.easeOut(duration: 0.6)) {
             revealProgress = 1.0
         }
-        
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
             hasStartedTypewriter = true
             startCursorBlink()
             typeWelcome()
         }
     }
-    
+
     private func startCursorBlink() {
         cursorTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
-            if phase == 3 || phase >= 5 {
+            if phase == 4 || phase >= 6 {
                 showCursor = false
             } else {
                 showCursor.toggle()
             }
         }
     }
-    
-    // Phase 0: Type "Welcome to Noor" - slower, softer
+
+    // Phase 0: Type "Welcome to Noor"
     private func typeWelcome() {
         guard phase == 0 else { return }
-        for (index, char) in fullWelcome.enumerated() {
+        for (index, _) in fullWelcome.enumerated() {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.12) {
                 guard self.phase == 0 else { return }
                 self.welcomeText = String(self.fullWelcome.prefix(index + 1))
-                
+
                 if index == self.fullWelcome.count - 1 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                         self.phase = 1
@@ -1061,8 +1101,8 @@ private struct TypewriterIntroPageView: View {
             }
         }
     }
-    
-    // Phase 1: Delete "Welcome to Noor" - slightly slower
+
+    // Phase 1: Delete "Welcome to Noor"
     private func deleteWelcome() {
         guard phase == 1 else { return }
         for index in 0..<fullWelcome.count {
@@ -1070,79 +1110,99 @@ private struct TypewriterIntroPageView: View {
                 guard self.phase == 1 else { return }
                 let remaining = self.fullWelcome.count - index - 1
                 self.welcomeText = String(self.fullWelcome.prefix(remaining))
-                
+
                 if remaining == 0 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                         self.phase = 2
-                        self.typeBuiltOnMotivation()
+                        self.typeBuiltOn()
                     }
                 }
             }
         }
     }
-    
-    // Phase 2: Type "Built on Motivation" - slower, softer
-    private func typeBuiltOnMotivation() {
+
+    // Phase 2: Type "Built on "
+    private func typeBuiltOn() {
         guard phase == 2 else { return }
-        // First type "Built on "
-        for (index, char) in builtOnFull.enumerated() {
+        for (index, _) in builtOnFull.enumerated() {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.12) {
                 guard self.phase == 2 else { return }
                 self.builtOnText = String(self.builtOnFull.prefix(index + 1))
-                
+
                 if index == self.builtOnFull.count - 1 {
-                    // Then show "Motivation" instantly and pause
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                        self.showMotivation = true
-                        
-                        // Pause, then strikethrough
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                            self.phase = 3
-                            self.strikethroughMotivation()
-                        }
+                        self.phase = 3
+                        self.typeMotivation()
                     }
                 }
             }
         }
     }
-    
-    // Phase 3: Strike through "Motivation"
+
+    // Phase 3: Type "motivation." character by character
+    private func typeMotivation() {
+        guard phase == 3 else { return }
+        for (index, _) in motivationFull.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.10) {
+                guard self.phase == 3 else { return }
+                self.motivationText = String(self.motivationFull.prefix(index + 1))
+
+                if index == self.motivationFull.count - 1 {
+                    // Pause, then strikethrough
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        self.phase = 4
+                        self.strikethroughMotivation()
+                    }
+                }
+            }
+        }
+    }
+
+    // Phase 4: Strike through "motivation." — it stays visible, just crossed out and faded
     private func strikethroughMotivation() {
         withAnimation(.easeInOut(duration: 0.5)) {
             strikethroughProgress = 1.0
         }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-            // Hide motivation and show Behavioral Science instantly (like Motivation appeared)
-            showMotivation = false
-            phase = 4
-            showBehavioralScience()
-        }
-    }
-    
-    // Phase 4: Show "Behavioral Science" instantly (same as Motivation)
-    private func showBehavioralScience() {
-        guard phase == 4 else { return }
-        behavioralScienceText = behavioralScienceFull
-        
-        // Wait a moment, then show final content
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            phase = 5
-            showFinalContent()
-        }
-    }
-    
-    // Phase 5: Show subtext and controls - slow, gentle fade
-    private func showFinalContent() {
-        // Wait a moment before fading in the subtext
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            withAnimation(.easeOut(duration: 1.2)) {
-                subtextOpacity = 1
+
+        // Fade the text after strikethrough completes
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                motivationFaded = true
             }
         }
-        
-        // Show controls after subtext starts fading in
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+
+        // Move to typing behavioral science
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            phase = 5
+            typeBehavioralScience()
+        }
+    }
+
+    // Phase 5: Type "behavioral science." character by character on the next line
+    private func typeBehavioralScience() {
+        guard phase == 5 else { return }
+        for (index, _) in behavioralScienceFull.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.08) {
+                guard self.phase == 5 else { return }
+                self.behavioralScienceText = String(self.behavioralScienceFull.prefix(index + 1))
+
+                if index == self.behavioralScienceFull.count - 1 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        self.phase = 6
+                        self.showFinalContent()
+                    }
+                }
+            }
+        }
+    }
+
+    // Phase 6: Show subtext and controls
+    private func showFinalContent() {
+        withAnimation(.easeOut(duration: 1.8)) {
+            subtextOpacity = 1
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             withAnimation(.easeOut(duration: 0.6)) {
                 dotsOpacity = 1
                 buttonOpacity = 1
@@ -1231,19 +1291,20 @@ private struct IntroPageView: View {
             .padding(.horizontal, NoorLayout.horizontalPadding)
         }
         .onAppear {
-            // Headline appears first
-            withAnimation(.easeOut(duration: 0.4)) {
+            // Headline appears first with gentle fade
+            withAnimation(.easeOut(duration: 0.7)) {
                 headlineAppeared = true
             }
-            // Rest fades in slowly after a moment
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                withAnimation(.easeOut(duration: 0.8)) {
+            // Rest fades in slowly after headline settles
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                withAnimation(.easeOut(duration: 1.0)) {
                     restAppeared = true
                 }
             }
         }
         .onDisappear {
-            appeared = false
+            headlineAppeared = false
+            restAppeared = false
         }
     }
 }
@@ -1640,6 +1701,7 @@ struct GenderButton: View {
 }
 
 private struct OnboardingAnnualPlanCard: View {
+    let priceString: String
     let action: () -> Void
 
     var body: some View {
@@ -1661,13 +1723,9 @@ private struct OnboardingAnnualPlanCard: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("$39.99/year")
+                Text("\(priceString)/year")
                     .font(NoorFont.largeTitle)
                     .foregroundStyle(Color.noorCharcoal)
-
-                Text("Only $3.33/month")
-                    .font(NoorFont.caption)
-                    .foregroundStyle(Color.noorSuccess)
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -1699,6 +1757,7 @@ private struct OnboardingAnnualPlanCard: View {
 }
 
 private struct OnboardingMonthlyPlanCard: View {
+    let priceString: String
     let action: () -> Void
 
     var body: some View {
@@ -1707,7 +1766,7 @@ private struct OnboardingMonthlyPlanCard: View {
                 .font(NoorFont.title)
                 .foregroundStyle(Color.noorCharcoal)
 
-            Text("$14.99/month")
+            Text("\(priceString)/month")
                 .font(NoorFont.title2)
                 .foregroundStyle(Color.noorCharcoal)
 

@@ -233,6 +233,24 @@ struct PaywallView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
+
+            HStack(spacing: 16) {
+                Button("Terms & Conditions") {
+                    if let url = URL(string: "https://noor-website-virid.vercel.app/terms/") {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.5))
+
+                Button("Privacy Policy") {
+                    if let url = URL(string: "https://noor-website-virid.vercel.app/privacy/") {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.5))
+            }
         }
     }
 

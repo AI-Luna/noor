@@ -13,8 +13,14 @@ import SwiftUI
 final class PurchaseManager {
     static let shared = PurchaseManager()
 
-    /// Set to true to temporarily unlock all features (remove before release).
-    private static let bypassPaywall = true
+    /// Bypass paywall in DEBUG builds only (TestFlight/Release will enforce the real paywall).
+    private static var bypassPaywall: Bool {
+        #if DEBUG
+        return true
+        #else
+        return false
+        #endif
+    }
 
     private(set) var _isPro: Bool = false
     var isPro: Bool {

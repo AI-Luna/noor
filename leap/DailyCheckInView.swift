@@ -8,6 +8,7 @@
 
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 struct DailyCheckInView: View {
     @Environment(\.dismiss) private var dismiss
@@ -15,6 +16,7 @@ struct DailyCheckInView: View {
 
     let goal: Goal
     @State private var goalRefreshed: Goal?
+    @State private var linkedHabits: [Microhabit] = []
     @State private var currentStreak: Int = 0
     @State private var showCelebration = false
     @State private var celebrationMessage = ""
@@ -26,6 +28,7 @@ struct DailyCheckInView: View {
     @State private var showDueDatePicker = false
     @State private var editingTask: DailyTask?
     @State private var editingDueDate: Date = Date()
+    @State private var checkmarkFillProgress: CGFloat = 0
 
     private var displayGoal: Goal { goalRefreshed ?? goal }
     private let calendar = Calendar.current
@@ -61,10 +64,11 @@ struct DailyCheckInView: View {
                 .ignoresSafeArea()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    headerSection
+                VStack(alignment: .leading, spacing: 20) {
+                    goalOverviewSection
                     currentChallengeSection
-                    progressSection
+                    linkedVisionSection
+                    linkedHabitsSection
                     upcomingSection
                     completedSection
                 }
@@ -84,6 +88,8 @@ struct DailyCheckInView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .onAppear {
             loadStreak()
+            loadLinkedHabits()
+            scheduleDailyChallengeNotification()
         }
         .sheet(isPresented: $showDueDatePicker) {
             dueDatePickerSheet
@@ -105,124 +111,132 @@ struct DailyCheckInView: View {
         }
     }
 
-    // MARK: - Header Section
-    private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Category icon and label
-            HStack(spacing: 12) {
-                Image(systemName: "cloud.fill")
-                    .font(.system(size: 32))
+    // MARK: - Goal Overview Section (merged with progress)
+    private var goalOverviewSection: some View {
+        HStack(alignment: .top, spacing: 16) {
+            // Left side: Destination & Why
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Destination")
+                    .font(NoorFont.caption)
+                    .foregroundStyle(Color.noorTextSecondary)
+                
+                Text(displayGoal.destination.isEmpty ? displayGoal.title : displayGoal.destination)
+                    .font(NoorFont.title)
                     .foregroundStyle(.white)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(GoalCategory(rawValue: displayGoal.category)?.shortName ?? displayGoal.category)
-                        .font(NoorFont.caption)
-                        .foregroundStyle(Color.noorTextSecondary)
-
-                    if !displayGoal.timeline.isEmpty {
-                        Text("Arrival: \(displayGoal.timeline)")
+                
+                if !displayGoal.timeline.isEmpty {
+                    HStack(spacing: 6) {
+                        Text("Arrival:")
                             .font(NoorFont.caption)
-                            .foregroundStyle(Color.noorRoseGold)
+                            .foregroundStyle(Color.noorTextSecondary)
+                        Text(displayGoal.timeline)
+                            .font(NoorFont.callout)
+                            .foregroundStyle(Color.noorAccent)
+                            .fontWeight(.medium)
                     }
                 }
-
-                Spacer()
-
-                // Streak badge
-                HStack(spacing: 4) {
-                    Image(systemName: "flame.fill")
-                        .foregroundStyle(Color.noorOrange)
-                    Text("\(currentStreak)")
-                        .font(NoorFont.callout)
-                        .foregroundStyle(.white)
+                
+                // Why this matters (user story)
+                if !displayGoal.userStory.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Why this matters")
+                            .font(NoorFont.caption)
+                            .foregroundStyle(Color.noorTextSecondary)
+                        Text(displayGoal.userStory)
+                            .font(NoorFont.body)
+                            .foregroundStyle(Color.noorRoseGold)
+                            .italic()
+                            .lineLimit(3)
+                    }
+                    .padding(.top, 4)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.1))
-                .clipShape(Capsule())
             }
-
-            // User story / description
-            if !displayGoal.userStory.isEmpty {
-                Text(displayGoal.userStory)
-                    .font(NoorFont.body)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            
+            // Right side: Progress ring and challenges count
+            VStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.noorViolet.opacity(0.3), lineWidth: 6)
+                        .frame(width: 80, height: 80)
+                    
+                    Circle()
+                        .trim(from: 0, to: progress / 100)
+                        .stroke(Color.noorAccent, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                        .frame(width: 80, height: 80)
+                        .rotationEffect(.degrees(-90))
+                        .animation(.spring(response: 0.5), value: progress)
+                    
+                    VStack(spacing: 0) {
+                        Text("\(Int(progress))%")
+                            .font(NoorFont.title2)
+                            .foregroundStyle(.white)
+                    }
+                }
+                
+                Text("\(completedChallenges.count)/\(sortedTasks.count)")
+                    .font(NoorFont.callout)
+                    .foregroundStyle(Color.noorAccent)
+                
+                Text("complete")
+                    .font(NoorFont.caption)
                     .foregroundStyle(Color.noorTextSecondary)
-                    .lineLimit(3)
-            }
-
-            // Boarding pass message
-            if !displayGoal.boardingPass.isEmpty {
-                Text(displayGoal.boardingPass)
-                    .font(NoorFont.body)
-                    .foregroundStyle(Color.noorRoseGold)
-                    .italic()
             }
         }
-        .padding(20)
-        .background(Color.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-    }
-
-    // MARK: - Progress Section
-    private var progressSection: some View {
-        VStack(spacing: 12) {
-            // Progress ring
-            ZStack {
-                Circle()
-                    .stroke(Color.noorViolet.opacity(0.3), lineWidth: 8)
-                    .frame(width: 100, height: 100)
-
-                Circle()
-                    .trim(from: 0, to: progress / 100)
-                    .stroke(
-                        Color.noorAccent,
-                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
-                    )
-                    .frame(width: 100, height: 100)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.spring(response: 0.5), value: progress)
-
-                VStack(spacing: 2) {
-                    Text("\(Int(progress))%")
-                        .font(NoorFont.title)
-                        .foregroundStyle(.white)
-
-                    Text("complete")
-                        .font(NoorFont.caption)
-                        .foregroundStyle(Color.noorTextSecondary)
-                }
-            }
-
-            Text("\(completedChallenges.count) of \(sortedTasks.count) challenges complete")
-                .font(NoorFont.caption)
-                .foregroundStyle(Color.noorTextSecondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(24)
-        .background(Color.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .padding(16)
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
     // MARK: - Current Challenge Section
     @ViewBuilder
     private var currentChallengeSection: some View {
         if let challenge = currentChallenge {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Today's Challenge")
-                    .font(NoorFont.title2)
-                    .foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: 12) {
+                // Header with emphasis
+                HStack {
+                    Text("Today's Challenge")
+                        .font(NoorFont.title)
+                        .foregroundStyle(.white)
+                    
+                    Spacer()
+                    
+                    if let dueDate = challenge.dueDate {
+                        Text("Due \(formatShortDate(dueDate))")
+                            .font(NoorFont.callout)
+                            .foregroundStyle(dueDateColor(dueDate))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(dueDateColor(dueDate).opacity(0.15))
+                            .clipShape(Capsule())
+                    }
+                }
 
-                // Challenge card — full width
-                VStack(alignment: .leading, spacing: 16) {
+                // Challenge card — prominent and clear
+                VStack(spacing: 16) {
                     HStack(alignment: .top, spacing: 16) {
-                        // Checkbox
+                        // Animated fill checkbox
                         Button {
-                            completeChallenge(challenge)
+                            completeChallengeWithAnimation(challenge)
                         } label: {
                             ZStack {
+                                // Outline (always visible)
                                 RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.noorRoseGold, lineWidth: 2)
-                                    .frame(width: 32, height: 32)
+                                    .stroke(Color.noorSuccess, lineWidth: 3)
+                                    .frame(width: 36, height: 36)
+                                
+                                // Fill (animates in)
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.noorSuccess)
+                                    .frame(width: 28 * checkmarkFillProgress, height: 28 * checkmarkFillProgress)
+                                
+                                // Checkmark (appears when complete)
+                                if checkmarkFillProgress >= 1 {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 18, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .transition(.scale.combined(with: .opacity))
+                                }
                             }
                         }
                         .buttonStyle(.plain)
@@ -231,43 +245,37 @@ struct DailyCheckInView: View {
                             Text(challenge.title)
                                 .font(NoorFont.title2)
                                 .foregroundStyle(Color.noorCharcoal)
+                                .fontWeight(.semibold)
 
                             Text(challenge.taskDescription)
                                 .font(NoorFont.body)
-                                .foregroundStyle(Color.noorCharcoal.opacity(0.8))
+                                .foregroundStyle(Color.noorCharcoal.opacity(0.75))
 
                             HStack(spacing: 12) {
                                 HStack(spacing: 4) {
                                     Image(systemName: "clock")
                                         .font(.system(size: 12))
                                     Text(challenge.estimatedTime)
-                                        .font(NoorFont.caption)
+                                        .font(NoorFont.callout)
                                 }
-                                .foregroundStyle(Color.noorViolet)
-
-                                if let dueDate = challenge.dueDate {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "calendar")
-                                            .font(.system(size: 12))
-                                        Text("Due \(formatShortDate(dueDate))")
-                                            .font(NoorFont.caption)
-                                    }
-                                    .foregroundStyle(dueDateColor(dueDate))
-                                    .onTapGesture {
-                                        editingTask = challenge
-                                        editingDueDate = dueDate
-                                        showDueDatePicker = true
-                                    }
-                                }
+                                .foregroundStyle(Color.noorSuccess)
                             }
                         }
+                        
+                        Spacer()
                     }
+                    
+                    // Tap to complete hint — centered
+                    Text("Tap the checkbox when you've completed this challenge")
+                        .font(NoorFont.caption)
+                        .foregroundStyle(Color.noorCharcoal.opacity(0.5))
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(20)
                 .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 20))
-                .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 4)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: Color.noorSuccess.opacity(0.2), radius: 12, x: 0, y: 6)
             }
         } else if progress >= 100 {
             // All complete
@@ -289,6 +297,113 @@ struct DailyCheckInView: View {
             .padding(24)
             .background(Color.white.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 20))
+        }
+    }
+
+    // MARK: - Linked Habits Section
+    @ViewBuilder
+    private var linkedHabitsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .foregroundStyle(Color.noorSuccess)
+                Text("Linked Habits")
+                    .font(NoorFont.title2)
+                    .foregroundStyle(.white)
+            }
+            
+            if linkedHabits.isEmpty {
+                VStack(spacing: 8) {
+                    Text("No habits linked yet")
+                        .font(NoorFont.body)
+                        .foregroundStyle(Color.noorTextSecondary)
+                    
+                    Text("Link habits to this journey to build consistent daily action")
+                        .font(NoorFont.caption)
+                        .foregroundStyle(Color.noorTextSecondary.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(16)
+                .background(Color.white.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                ForEach(linkedHabits, id: \.id) { habit in
+                    HStack(spacing: 12) {
+                        Circle()
+                            .fill(Color.noorSuccess)
+                            .frame(width: 8, height: 8)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(habit.title)
+                                .font(NoorFont.body)
+                                .foregroundStyle(.white)
+                            
+                            if !habit.habitDescription.isEmpty {
+                                Text(habit.habitDescription)
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        if habit.focusDurationMinutes > 0 {
+                            Text("\(habit.focusDurationMinutes) min")
+                                .font(NoorFont.caption)
+                                .foregroundStyle(Color.noorSuccess)
+                        }
+                    }
+                    .padding(12)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+            }
+        }
+    }
+
+    // MARK: - Linked Vision Section
+    @ViewBuilder
+    private var linkedVisionSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Action-oriented header
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Image(systemName: "bolt.fill")
+                        .foregroundStyle(Color.noorOrange)
+                    Text("Take Action Now")
+                        .font(NoorFont.title2)
+                        .foregroundStyle(.white)
+                }
+                
+                Text("Tap into your vision to fuel momentum")
+                    .font(NoorFont.caption)
+                    .foregroundStyle(Color.noorTextSecondary)
+            }
+            
+            VStack(spacing: 8) {
+                if !displayGoal.destination.isEmpty {
+                    HStack(spacing: 12) {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(Color.noorOrange)
+                            .font(.system(size: 14))
+                        
+                        Text("Becoming someone who \(displayGoal.destination.lowercased())")
+                            .font(NoorFont.body)
+                            .foregroundStyle(Color.noorTextSecondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(Color.noorOrange.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                
+                Text("Add vision triggers in the Vision tab to stay inspired and ready to act")
+                    .font(NoorFont.caption)
+                    .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
         }
     }
 
@@ -688,6 +803,78 @@ struct DailyCheckInView: View {
         case "travel": return "airplane"
         case "career": return "briefcase.fill"
         default: return "target"
+        }
+    }
+
+    // MARK: - Load Linked Habits
+    private func loadLinkedHabits() {
+        Task { @MainActor in
+            // Get habits linked to this goal
+            let goalID = goal.id.uuidString
+            do {
+                let allHabits = try await dataManager.fetchMicrohabits()
+                linkedHabits = allHabits.filter { habit in
+                    habit.goalID == goalID
+                }
+            } catch {
+                print("Failed to load linked habits: \(error)")
+            }
+        }
+    }
+
+    // MARK: - Schedule Daily Challenge Notification
+    private func scheduleDailyChallengeNotification() {
+        guard let challenge = currentChallenge, let dueDate = challenge.dueDate else { return }
+        
+        let center = UNUserNotificationCenter.current()
+        
+        // Remove existing notifications for this goal
+        center.removePendingNotificationRequests(withIdentifiers: ["challenge_\(goal.id.uuidString)"])
+        
+        // Create notification content
+        let content = UNMutableNotificationContent()
+        content.title = "Today's Challenge"
+        content.body = "\(challenge.title) - Due \(formatShortDate(dueDate))"
+        content.sound = .default
+        
+        // Schedule for 9 AM every day until challenge is complete
+        var dateComponents = DateComponents()
+        dateComponents.hour = 9
+        dateComponents.minute = 0
+        
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+        
+        let request = UNNotificationRequest(
+            identifier: "challenge_\(goal.id.uuidString)",
+            content: content,
+            trigger: trigger
+        )
+        
+        center.add(request) { error in
+            if let error = error {
+                print("Failed to schedule challenge notification: \(error)")
+            }
+        }
+    }
+
+    // MARK: - Complete Challenge with Animation
+    private func completeChallengeWithAnimation(_ task: DailyTask) {
+        // Haptic feedback
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+        
+        // Animate the checkbox filling
+        withAnimation(.easeInOut(duration: 0.4)) {
+            checkmarkFillProgress = 1.0
+        }
+        
+        // After animation, complete the challenge
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            completeChallenge(task)
+            // Reset for next challenge
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                checkmarkFillProgress = 0
+            }
         }
     }
 }

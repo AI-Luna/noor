@@ -22,6 +22,7 @@ struct MicrohabitsView: View {
     @State private var isLoading = true
     @State private var showAddHabitModal = false
     @State private var showAddForm = false
+    @State private var pendingAddForm = false
     @State private var selectedHabitType: MicrohabitType = .create
     @State private var newHabitTitle = ""
     @State private var habitToEdit: Microhabit?
@@ -189,7 +190,12 @@ struct MicrohabitsView: View {
             } message: {
                 Text("Edit or delete this habit?")
             }
-            .sheet(isPresented: $showAddHabitModal) {
+            .sheet(isPresented: $showAddHabitModal, onDismiss: {
+                if pendingAddForm {
+                    pendingAddForm = false
+                    showAddForm = true
+                }
+            }) {
                 AddHabitModal(
                     habitTitle: $newHabitTitle,
                     onDismiss: {
@@ -199,14 +205,14 @@ struct MicrohabitsView: View {
                     onCreateHabit: {
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         selectedHabitType = .create
+                        pendingAddForm = true
                         showAddHabitModal = false
-                        showAddForm = true
                     },
                     onReplaceHabit: {
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         selectedHabitType = .replace
+                        pendingAddForm = true
                         showAddHabitModal = false
-                        showAddForm = true
                     }
                 )
             }
@@ -276,52 +282,31 @@ struct MicrohabitsView: View {
     }
 
     private func habitsGroupedByTimeframe(habits: [Microhabit]) -> some View {
-        let order = HabitTimeframe.displayOrder
-        return ScrollView {
-            LazyVStack(alignment: .leading, spacing: 8) {
-                ForEach(order, id: \.self) { timeframe in
-                    let habitsInSlot = habits.filter { $0.timeframe == timeframe }
-                    if !habitsInSlot.isEmpty {
-                        // Section header
-                        HStack(spacing: 6) {
-                            Image(systemName: timeframe.icon)
-                                .font(.system(size: 14))
-                                .foregroundStyle(Color.noorSuccess)
-                            Text(timeframe.displayName)
-                                .font(NoorFont.callout)
-                                .foregroundStyle(Color.noorSuccess)
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
-                        .padding(.bottom, 2)
-
-                        ForEach(habitsInSlot, id: \.id) { habit in
-                            SwipeActionCard(
-                                onEdit: {
-                                    habitToEdit = habit
-                                    showEditSheet = true
-                                },
-                                onDelete: { deleteHabit(habit) }
-                            ) {
-                                MicrohabitCard(
-                                    habit: habit,
-                                    linkedGoal: goals.first { $0.id.uuidString == habit.goalID },
-                                    onStartFocus: { habitForTimer = habit },
-                                    onEdit: {
-                                        habitToEdit = habit
-                                        showEditSheet = true
-                                    },
-                                    onDelete: { deleteHabit(habit) },
-                                    onTap: { habitForActions = habit }
-                                )
-                            }
-                            .padding(.horizontal, 20)
-                        }
-                    }
+        LazyVStack(alignment: .leading, spacing: 8) {
+            ForEach(habits, id: \.id) { habit in
+                SwipeActionCard(
+                    onEdit: {
+                        habitToEdit = habit
+                        showEditSheet = true
+                    },
+                    onDelete: { deleteHabit(habit) }
+                ) {
+                    MicrohabitCard(
+                        habit: habit,
+                        linkedGoal: goals.first { $0.id.uuidString == habit.goalID },
+                        onStartFocus: { habitForTimer = habit },
+                        onEdit: {
+                            habitToEdit = habit
+                            showEditSheet = true
+                        },
+                        onDelete: { deleteHabit(habit) },
+                        onTap: { habitForActions = habit }
+                    )
                 }
+                .padding(.horizontal, 20)
             }
-            .padding(.bottom, 100)
         }
+        .padding(.bottom, 100)
     }
 
     private var emptyStateMicroHabits: some View {
@@ -419,51 +404,49 @@ struct MicrohabitsView: View {
     }
 
     private var journeyHabitsList: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 8) {
-                ForEach(journeysWithHabits, id: \.id) { goal in
-                    let habitsForJourney = microhabits.filter { $0.goalID == goal.id.uuidString }
-                    if !habitsForJourney.isEmpty {
-                        // Section header - journey name
-                        HStack(spacing: 6) {
-                            Image(systemName: "cloud.fill")
-                                .font(.system(size: 14))
-                                .foregroundStyle(Color.noorAccent)
-                            Text(goal.destination.isEmpty ? goal.title : goal.destination)
-                                .font(NoorFont.callout)
-                                .foregroundStyle(Color.noorAccent)
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
-                        .padding(.bottom, 2)
-                        
-                        ForEach(habitsForJourney, id: \.id) { habit in
-                            SwipeActionCard(
+        LazyVStack(alignment: .leading, spacing: 8) {
+            ForEach(journeysWithHabits, id: \.id) { goal in
+                let habitsForJourney = microhabits.filter { $0.goalID == goal.id.uuidString }
+                if !habitsForJourney.isEmpty {
+                    // Section header - journey name
+                    HStack(spacing: 6) {
+                        Image(systemName: "cloud.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.noorAccent)
+                        Text(goal.destination.isEmpty ? goal.title : goal.destination)
+                            .font(NoorFont.callout)
+                            .foregroundStyle(Color.noorAccent)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 2)
+
+                    ForEach(habitsForJourney, id: \.id) { habit in
+                        SwipeActionCard(
+                            onEdit: {
+                                habitToEdit = habit
+                                showEditSheet = true
+                            },
+                            onDelete: { deleteHabit(habit) }
+                        ) {
+                            MicrohabitCard(
+                                habit: habit,
+                                linkedGoal: goal,
+                                onStartFocus: { habitForTimer = habit },
                                 onEdit: {
                                     habitToEdit = habit
                                     showEditSheet = true
                                 },
-                                onDelete: { deleteHabit(habit) }
-                            ) {
-                                MicrohabitCard(
-                                    habit: habit,
-                                    linkedGoal: goal,
-                                    onStartFocus: { habitForTimer = habit },
-                                    onEdit: {
-                                        habitToEdit = habit
-                                        showEditSheet = true
-                                    },
-                                    onDelete: { deleteHabit(habit) },
-                                    onTap: { habitForActions = habit }
-                                )
-                            }
-                            .padding(.horizontal, 20)
+                                onDelete: { deleteHabit(habit) },
+                                onTap: { habitForActions = habit }
+                            )
                         }
+                        .padding(.horizontal, 20)
                     }
                 }
             }
-            .padding(.bottom, 100)
         }
+        .padding(.bottom, 100)
     }
 
     // MARK: - Journey Habits Detail (all habits for one journey)
@@ -688,7 +671,7 @@ struct HabitScienceLessonSheetContent: View {
                             .font(.system(size: 18))
                             .foregroundStyle(Color.noorSuccess)
                         Text("Science of micro habits")
-                            .font(NoorFont.title)
+                            .font(NoorFont.largeTitle)
                             .foregroundStyle(.white)
                     }
                     Spacer()
@@ -781,6 +764,12 @@ struct MicrohabitCard: View {
     let onDelete: () -> Void
     var onTap: (() -> Void)? = nil  // tap center to show Edit/Delete choice
 
+    static func formatTime(hour: Int, minute: Int) -> String {
+        let period = hour >= 12 ? "PM" : "AM"
+        let h = hour % 12 == 0 ? 12 : hour % 12
+        return String(format: "%d:%02d %@", h, minute, period)
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             // Left: title, description, timeframe + journey, reminder days at bottom left
@@ -817,11 +806,15 @@ struct MicrohabitCard: View {
                     }
                 }
 
-                // Reminder days and focus timing
+                // Reminder time + days
                 if habit.reminderFrequency != .never {
                     HStack(spacing: 4) {
                         Image(systemName: "bell.fill")
                             .font(.system(size: 11))
+                        if let hour = habit.reminderHour, let minute = habit.reminderMinute {
+                            Text(Self.formatTime(hour: hour, minute: minute))
+                                .font(NoorFont.caption)
+                        }
                         Text(habit.reminderDaysDisplayName)
                             .font(NoorFont.caption)
                     }
@@ -854,16 +847,7 @@ struct MicrohabitCard: View {
             }
         }
         .padding(20)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color.noorSuccess.opacity(0.2),
-                    Color.noorViolet.opacity(0.15)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
+        .background(Color.white.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: NoorLayout.cornerRadius)
@@ -898,7 +882,7 @@ struct AddHabitModal: View {
                 // Header with seamless close
                 HStack(alignment: .center) {
                     Text("Add a habit")
-                        .font(NoorFont.title)
+                        .font(NoorFont.largeTitle)
                         .foregroundStyle(.white)
                     Spacer()
                     Button(action: onDismiss) {
@@ -914,7 +898,7 @@ struct AddHabitModal: View {
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("What habit would you like to build?")
-                        .font(NoorFont.body)
+                        .font(NoorFont.bodyLarge)
                         .foregroundStyle(Color.noorTextSecondary)
                     TextField("e.g. 2-page journal session", text: $habitTitle)
                         .textFieldStyle(.plain)
@@ -988,11 +972,11 @@ struct AddHabitOptionRow: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title)
-                        .font(NoorFont.title2)
+                        .font(NoorFont.title)
                         .foregroundStyle(.white)
 
                     Text(subtitle)
-                        .font(NoorFont.caption)
+                        .font(NoorFont.bodyLarge)
                         .foregroundStyle(Color.noorTextSecondary)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1040,6 +1024,10 @@ struct AddMicrohabitView: View {
     @State private var reminderDays: Set<Int> = []  // 0 = Sun … 6 = Sat; at least 1 when reminder on
     @State private var reminderTimeOffset: ReminderTimeOffset = .atHabitTime
     @State private var isSaving = false
+    
+    private var canSave: Bool {
+        !title.trimmingCharacters(in: .whitespaces).isEmpty && !isSaving
+    }
 
     private static let weekdayLetters = ["S", "M", "T", "W", "T", "F", "S"]  // Sun–Sat
     
@@ -1107,7 +1095,7 @@ struct AddMicrohabitView: View {
                             if existing != nil {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("Habit title")
-                                        .font(NoorFont.caption)
+                                        .font(NoorFont.bodyLarge)
                                         .foregroundStyle(Color.noorTextSecondary)
                                     TextField("e.g. 2-page journal session", text: $title)
                                         .textFieldStyle(.plain)
@@ -1120,7 +1108,7 @@ struct AddMicrohabitView: View {
                             }
 
                             Text("How it supports your grander vision")
-                                .font(NoorFont.title2)
+                                .font(NoorFont.title)
                                 .foregroundStyle(.white)
                             TextField("I will ... so that I can become ...", text: $habitDescription, axis: .vertical)
                                 .textFieldStyle(.plain)
@@ -1135,10 +1123,10 @@ struct AddMicrohabitView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack(spacing: 4) {
                                     Text("Link to a journey")
-                                        .font(NoorFont.caption)
+                                        .font(NoorFont.bodyLarge)
                                         .foregroundStyle(Color.noorTextSecondary)
                                     Text("(optional)")
-                                        .font(NoorFont.caption)
+                                        .font(NoorFont.bodyLarge)
                                         .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
                                 }
                                 Picker("Journey", selection: $selectedGoalID) {
@@ -1164,14 +1152,14 @@ struct AddMicrohabitView: View {
                         // SECTION 2: Scheduling
                         VStack(alignment: .leading, spacing: 16) {
                             Text("Schedule")
-                                .font(NoorFont.title2)
+                                .font(NoorFont.title)
                                 .foregroundStyle(.white)
 
                             // Habit time
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Time of day")
-                                        .font(NoorFont.caption)
+                                        .font(NoorFont.bodyLarge)
                                         .foregroundStyle(Color.noorTextSecondary)
                                     if let t = habitTime {
                                         Text(Self.habitTimeFormatter.string(from: t))
@@ -1204,7 +1192,7 @@ struct AddMicrohabitView: View {
                             // Focus timer
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("Focus timer")
-                                    .font(NoorFont.caption)
+                                    .font(NoorFont.bodyLarge)
                                     .foregroundStyle(Color.noorTextSecondary)
                                 HStack(spacing: 8) {
                                     ForEach(focusPresetOptions, id: \.self) { min in
@@ -1271,7 +1259,7 @@ struct AddMicrohabitView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 Text("Reminders")
-                                    .font(NoorFont.title2)
+                                    .font(NoorFont.title)
                                     .foregroundStyle(.white)
                                 Spacer()
                                 Toggle("", isOn: Binding(
@@ -1292,7 +1280,7 @@ struct AddMicrohabitView: View {
                             if reminderFrequency != .never {
                                 VStack(alignment: .leading, spacing: 12) {
                                     Text("Repeat on")
-                                        .font(NoorFont.caption)
+                                        .font(NoorFont.bodyLarge)
                                         .foregroundStyle(Color.noorTextSecondary)
                                     HStack(spacing: 8) {
                                         ForEach(0..<7, id: \.self) { day in
@@ -1315,7 +1303,7 @@ struct AddMicrohabitView: View {
                                     }
 
                                     Text("Remind me")
-                                        .font(NoorFont.caption)
+                                        .font(NoorFont.bodyLarge)
                                         .foregroundStyle(Color.noorTextSecondary)
                                         .padding(.top, 4)
                                     Picker("Reminder time", selection: $reminderTimeOffset) {
@@ -1341,10 +1329,8 @@ struct AddMicrohabitView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 16))
 
                         Button {
+                            print("🔘 Add habit button tapped")
                             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                            let trimmed = title.trimmingCharacters(in: .whitespaces)
-                            if trimmed.isEmpty { return }
-                            if isSaving { return }
                             saveHabit()
                         } label: {
                             Text(existing == nil ? "Add habit" : "Save changes")
@@ -1352,9 +1338,10 @@ struct AddMicrohabitView: View {
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 52)
-                                .background(Color.noorSuccess)
+                                .background(canSave ? Color.noorSuccess : Color.noorSuccess.opacity(0.4))
                                 .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
                         }
+                        .disabled(!canSave)
                         .padding(.top, 16)
                     }
                     .padding(20)
@@ -1432,12 +1419,18 @@ struct AddMicrohabitView: View {
     }
 
     private func saveHabit() {
-        guard !title.trimmingCharacters(in: .whitespaces).isEmpty else {
-            print("❌ Save failed: title is empty")
+        let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
+        guard !trimmedTitle.isEmpty else {
+            print("❌ Save failed: title is empty (title='\(title)')")
             return
         }
         
-        print("💾 Starting to save habit: '\(title)'")
+        guard !isSaving else {
+            print("⚠️ Already saving, ignoring duplicate tap")
+            return
+        }
+        
+        print("💾 Starting to save habit: '\(trimmedTitle)'")
         print("   - goalID: \(selectedGoalID ?? "nil")")
         print("   - reminderFrequency: \(reminderFrequency)")
         print("   - reminderDays: \(reminderDays)")
@@ -1445,14 +1438,10 @@ struct AddMicrohabitView: View {
         isSaving = true
 
         Task { @MainActor in
-            defer {
-                print("🏁 Save task completed, setting isSaving = false")
-                isSaving = false
-            }
             do {
                 if let h = existing {
                     print("📝 Updating existing habit...")
-                    h.title = title.trimmingCharacters(in: .whitespaces)
+                    h.title = trimmedTitle
                     h.habitDescription = habitDescription.trimmingCharacters(in: .whitespaces)
                     h.goalID = selectedGoalID
                     h.customTag = customTag.trimmingCharacters(in: .whitespaces).isEmpty ? nil : customTag.trimmingCharacters(in: .whitespaces)
@@ -1470,7 +1459,7 @@ struct AddMicrohabitView: View {
                 } else {
                     print("📝 Creating new habit...")
                     let habit = Microhabit(
-                        title: title.trimmingCharacters(in: .whitespaces),
+                        title: trimmedTitle,
                         habitDescription: habitDescription.trimmingCharacters(in: .whitespaces),
                         goalID: selectedGoalID,
                         customTag: customTag.trimmingCharacters(in: .whitespaces).isEmpty ? nil : customTag.trimmingCharacters(in: .whitespaces),
@@ -1489,12 +1478,14 @@ struct AddMicrohabitView: View {
                     print("✅ Saved new habit to database")
                 }
                 
-                print("🔄 About to call onSave callback...")
+                print("🔄 Calling onSave to dismiss and refresh...")
+                isSaving = false
                 onSave()
                 print("✅ onSave callback completed")
             } catch {
                 print("❌ Error saving habit: \(error)")
                 print("   Error details: \(error.localizedDescription)")
+                isSaving = false
             }
         }
     }

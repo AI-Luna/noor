@@ -84,6 +84,10 @@ struct ProgressTabView: View {
                             .padding(.horizontal, 20)
                             .padding(.top, 16)
 
+                            // Your Momentum section
+                            momentumSection
+                                .padding(.horizontal, 20)
+
                             // Calendar view
                             calendarSection
                                 .padding(.horizontal, 20)
@@ -292,6 +296,81 @@ struct ProgressTabView: View {
             .clipShape(RoundedRectangle(cornerRadius: 20))
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Momentum Section
+    private var momentumSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Your Momentum")
+                .font(NoorFont.title)
+                .foregroundStyle(.white)
+            
+            HStack(spacing: 8) {
+                // Streak cell
+                VStack(spacing: 4) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.noorOrange)
+                        Text("Day Streak")
+                            .font(.system(size: 13, weight: .semibold, design: .serif))
+                            .foregroundStyle(.white)
+                    }
+                    
+                    Text("\(globalStreak)")
+                        .font(.system(size: 28, weight: .bold, design: .serif))
+                        .foregroundStyle(.white)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                
+                // Flights Booked
+                VStack(spacing: 4) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "airplane.departure")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.noorAccent)
+                        Text("Journeys")
+                            .font(.system(size: 13, weight: .semibold, design: .serif))
+                            .foregroundStyle(.white)
+                    }
+                    
+                    Text("\(goals.count)")
+                        .font(.system(size: 28, weight: .bold, design: .serif))
+                        .foregroundStyle(.white)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                
+                // Completed Challenges
+                VStack(spacing: 4) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.noorSuccess)
+                        Text("Done")
+                            .font(.system(size: 13, weight: .semibold, design: .serif))
+                            .foregroundStyle(.white)
+                    }
+                    
+                    Text("\(totalCompletedChallenges)")
+                        .font(.system(size: 28, weight: .bold, design: .serif))
+                        .foregroundStyle(.white)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
+        }
+    }
+    
+    private var totalCompletedChallenges: Int {
+        goals.flatMap { $0.dailyTasks }.filter { $0.isCompleted }.count
     }
 
     // MARK: - Calendar Section
