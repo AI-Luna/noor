@@ -44,7 +44,7 @@ final class PurchaseManager {
     func checkProStatus() async {
         do {
             let customerInfo = try await Purchases.shared.customerInfo()
-            let proEntitlement = customerInfo.entitlements["pro"]
+            let proEntitlement = customerInfo.entitlements["Noor Pro"]
             _isPro = proEntitlement?.isActive == true
             
             // Debug logging
@@ -93,7 +93,7 @@ final class PurchaseManager {
             
             if !result.userCancelled {
                 // Use the CustomerInfo from the purchase result directly
-                let proActive = result.customerInfo.entitlements["pro"]?.isActive == true
+                let proActive = result.customerInfo.entitlements["Noor Pro"]?.isActive == true
                 _isPro = proActive
                 debugLog("Purchase completed - pro active: \(proActive)")
                 return proActive || Self.bypassPaywall
@@ -141,7 +141,7 @@ final class PurchaseManager {
         debugLog("Restoring purchases...")
         do {
             let customerInfo = try await Purchases.shared.restorePurchases()
-            let proActive = customerInfo.entitlements["pro"]?.isActive == true
+            let proActive = customerInfo.entitlements["Noor Pro"]?.isActive == true
             _isPro = proActive
             debugLog("Restore completed - pro active: \(proActive)")
             debugLog("Active entitlements after restore: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")

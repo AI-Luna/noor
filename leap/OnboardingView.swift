@@ -1165,7 +1165,7 @@ struct OnboardingView: View {
         NSLog("[OnboardingPaywall] Active entitlements: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")
         NSLog("[OnboardingPaywall] All entitlements: \(customerInfo.entitlements.all.keys.joined(separator: ", "))")
         
-        let proActive = customerInfo.entitlements["pro"]?.isActive == true
+        let proActive = customerInfo.entitlements["Noor Pro"]?.isActive == true
         
         if proActive {
             // Refresh global state and complete

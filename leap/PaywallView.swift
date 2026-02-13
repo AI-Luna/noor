@@ -138,7 +138,7 @@ struct NoorPaywallView: View {
         NSLog("[PaywallView] Active entitlements: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")
         NSLog("[PaywallView] All entitlements: \(customerInfo.entitlements.all.keys.joined(separator: ", "))")
         
-        let proActive = customerInfo.entitlements["pro"]?.isActive == true
+        let proActive = customerInfo.entitlements["Noor Pro"]?.isActive == true
         
         if proActive {
             // Refresh global state
