@@ -333,9 +333,12 @@ struct OnboardingView: View {
             .tabViewStyle(.page(indexDisplayMode: .never))
             .animation(.easeInOut(duration: 0.5), value: introPage)
             .onChange(of: introPage) { _, newPage in
-                // Request notification permission when the "repeated tasks" / notifications screen appears (page id 4)
+                // Request notification permission after all 3 notification cards have popped up (page 4: "Your brain prioritizes...")
+                // Cards appear at 0.6s, 1.4s, 2.2s — ask shortly after the last one
                 if newPage == 4 {
-                    requestNotificationPermission()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.7) {
+                        requestNotificationPermission()
+                    }
                 }
             }
             
@@ -1074,6 +1077,20 @@ struct OnboardingView: View {
         .task {
             await checkSubscriptionOnPaywallAppear()
         }
+        // Periodic recheck while paywall is visible (catches "already subscribed" when scenePhase doesn't change)
+        .task(id: paywallCheckComplete) {
+            guard paywallCheckComplete else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_500_000_000) // 2.5s
+                if Task.isCancelled { break }
+                await PurchaseManager.shared.checkProStatus()
+                if PurchaseManager.shared._isPro {
+                    NSLog("[OnboardingPaywall] Periodic recheck: user is Pro - completing")
+                    await MainActor.run { saveUserAndComplete() }
+                    return
+                }
+            }
+        }
         // Re-check when app becomes active (catches "already subscribed" dialog dismissal)
         .onChange(of: scenePhase) { oldPhase, newPhase in
             if newPhase == .active && oldPhase == .inactive && paywallCheckComplete {
@@ -1092,10 +1109,17 @@ struct OnboardingView: View {
         }
     }
     
-    /// Check subscription status when paywall appears - skip if already Pro
+    /// Check subscription status when paywall appears - skip if already Pro (with timeout so we never hang)
     private func checkSubscriptionOnPaywallAppear() async {
         NSLog("[OnboardingPaywall] Checking subscription status...")
-        await PurchaseManager.shared.checkProStatus()
+        
+        // Timeout after 5s so user is never stuck on loading
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await PurchaseManager.shared.checkProStatus() }
+            group.addTask { try? await Task.sleep(nanoseconds: 5_000_000_000) }
+            await group.next()
+            group.cancelAll()
+        }
         
         if PurchaseManager.shared._isPro {
             NSLog("[OnboardingPaywall] User already subscribed - skipping paywall")
@@ -1119,6 +1143,16 @@ struct OnboardingView: View {
         
         if PurchaseManager.shared._isPro {
             NSLog("[OnboardingPaywall] User now has active subscription after re-check - completing")
+            await MainActor.run {
+                saveUserAndComplete()
+            }
+            return
+        }
+        
+        // If still not Pro, try restore once (handles "already subscribed" edge case)
+        NSLog("[OnboardingPaywall] Re-check not Pro - trying restore once...")
+        let restored = await PurchaseManager.shared.restoreAndCheck()
+        if restored {
             await MainActor.run {
                 saveUserAndComplete()
             }
@@ -1825,7 +1859,7 @@ private struct OnboardingBoardingPassMockup: View {
                             Text("FROM")
                                 .font(.system(size: 8, weight: .medium, design: .monospaced))
                                 .foregroundStyle(.black.opacity(0.6))
-                            Text("Current You")
+                            Text("9-5 Job")
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(.black)
                         }
@@ -1834,7 +1868,7 @@ private struct OnboardingBoardingPassMockup: View {
                             Text("TO")
                                 .font(.system(size: 8, weight: .medium, design: .monospaced))
                                 .foregroundStyle(.black.opacity(0.6))
-                            Text("Your Dream")
+                            Text("Open a Yoga Studio")
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(.black)
                         }
@@ -1851,7 +1885,7 @@ private struct OnboardingBoardingPassMockup: View {
                     
                     HStack(spacing: 4) {
                         Image(systemName: "calendar").font(.system(size: 8)).foregroundStyle(Color(white: 0.5))
-                        Text("ETA: Your Timeline")
+                        Text("ETA: Feb. 26 2026")
                             .font(.system(size: 9, weight: .medium, design: .monospaced))
                             .foregroundStyle(Color(white: 0.4))
                     }
@@ -2591,7 +2625,7 @@ private struct OnboardingDepartureInputView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, 24)
 
-            TextField("e.g. Overthinking, 9-to-5, Square one", text: $departure)
+            TextField("Overthinking", text: $departure)
                 .textFieldStyle(.plain)
                 .font(NoorFont.title)
                 .foregroundStyle(.white)

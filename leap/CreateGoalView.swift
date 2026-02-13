@@ -262,7 +262,7 @@ struct CreateGoalView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, 24)
 
-            TextField("e.g. Overthinking, 9-to-5, Square one", text: $departure)
+            TextField("Overthinking", text: $departure)
                 .textFieldStyle(.plain)
                 .font(NoorFont.title)
                 .foregroundStyle(.white)

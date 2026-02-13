@@ -30,7 +30,7 @@ struct NoorPaywallView: View {
                             .tint(.white)
                     }
             } else {
-                RevenueCatUI.PaywallView(displayCloseButton: true)
+                RevenueCatUI.PaywallView(displayCloseButton: false)
                     .onPurchaseCompleted { customerInfo in
                         handlePurchaseOrRestore(customerInfo: customerInfo, source: "Purchase")
                     }
@@ -50,6 +50,20 @@ struct NoorPaywallView: View {
         .task {
             await checkAndDismissIfSubscribed()
         }
+        // Periodic recheck while paywall is visible (catches "already subscribed" when scenePhase doesn't change)
+        .task(id: isCheckingStatus) {
+            guard !isCheckingStatus else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_500_000_000) // 2.5s
+                if Task.isCancelled { break }
+                await PurchaseManager.shared.checkProStatus()
+                if PurchaseManager.shared._isPro {
+                    NSLog("[PaywallView] Periodic recheck: user is Pro - dismissing")
+                    await MainActor.run { showSuccess = true }
+                    return
+                }
+            }
+        }
         // Re-check when app becomes active (catches "already subscribed" dialog dismissal)
         .onChange(of: scenePhase) { oldPhase, newPhase in
             if newPhase == .active && oldPhase == .inactive {
@@ -68,10 +82,17 @@ struct NoorPaywallView: View {
         }
     }
     
-    /// Check subscription status on appear - dismiss immediately if already Pro
+    /// Check subscription status on appear - dismiss immediately if already Pro (with timeout so we never hang)
     private func checkAndDismissIfSubscribed() async {
         NSLog("[PaywallView] Checking subscription status on appear...")
-        await PurchaseManager.shared.checkProStatus()
+        
+        // Timeout after 5s so user is never stuck on loading (e.g. network/RevenueCat slow)
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await PurchaseManager.shared.checkProStatus() }
+            group.addTask { try? await Task.sleep(nanoseconds: 5_000_000_000) }
+            await group.next()
+            group.cancelAll()
+        }
         
         if PurchaseManager.shared._isPro {
             NSLog("[PaywallView] User already has active subscription - dismissing paywall")
@@ -95,6 +116,16 @@ struct NoorPaywallView: View {
         
         if PurchaseManager.shared._isPro {
             NSLog("[PaywallView] User now has active subscription after re-check - dismissing")
+            await MainActor.run {
+                showSuccess = true
+            }
+            return
+        }
+        
+        // If still not Pro, try restore once (handles stale cache / "already subscribed" edge case)
+        NSLog("[PaywallView] Re-check not Pro - trying restore once...")
+        let restored = await PurchaseManager.shared.restoreAndCheck()
+        if restored {
             await MainActor.run {
                 showSuccess = true
             }
