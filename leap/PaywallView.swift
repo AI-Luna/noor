@@ -32,10 +32,23 @@ struct NoorPaywallView: View {
             } else {
                 RevenueCatUI.PaywallView(displayCloseButton: false)
                     .onPurchaseCompleted { customerInfo in
-                        handlePurchaseOrRestore(customerInfo: customerInfo, source: "Purchase")
+                        // Purchase succeeded (Apple confirmed) - show success and dismiss
+                        NSLog("[PaywallView] onPurchaseCompleted delegate fired")
+                        NSLog("[PaywallView] Active entitlements: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")
+                        Task { await PurchaseManager.shared.checkProStatus() }
+                        showSuccess = true
                     }
                     .onRestoreCompleted { customerInfo in
-                        handlePurchaseOrRestore(customerInfo: customerInfo, source: "Restore")
+                        // Restore completed - check if subscription is active
+                        NSLog("[PaywallView] onRestoreCompleted delegate fired")
+                        NSLog("[PaywallView] Active entitlements: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")
+                        let hasActiveSubscription = customerInfo.entitlements["Noor Pro"]?.isActive == true
+                        if hasActiveSubscription {
+                            Task { await PurchaseManager.shared.checkProStatus() }
+                            showSuccess = true
+                        } else {
+                            NSLog("[PaywallView] Restore completed but no active 'Noor Pro' entitlement")
+                        }
                     }
             }
         }
@@ -132,51 +145,6 @@ struct NoorPaywallView: View {
         }
     }
     
-    /// Handle purchase or restore completion
-    private func handlePurchaseOrRestore(customerInfo: CustomerInfo, source: String) {
-        NSLog("[PaywallView] \(source) completed")
-        NSLog("[PaywallView] Active entitlements: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")
-        NSLog("[PaywallView] All entitlements: \(customerInfo.entitlements.all.keys.joined(separator: ", "))")
-        
-        let proActive = customerInfo.entitlements["Noor Pro"]?.isActive == true
-        
-        if proActive {
-            // Refresh global state
-            Task { await PurchaseManager.shared.checkProStatus() }
-            showSuccess = true
-            return
-        }
-        
-        // For PURCHASE: Apple confirmed it - proceed even if entitlement check fails (sync delay)
-        // For RESTORE: only proceed if entitlement is actually active
-        if source == "Purchase" {
-            NSLog("[PaywallView] Purchase confirmed by Apple - proceeding regardless of entitlement sync")
-            Task { await PurchaseManager.shared.checkProStatus() }
-            showSuccess = true
-            return
-        }
-        
-        // Restore path: verify entitlement is actually active
-        NSLog("[PaywallView] Restore completed but pro not active - checking again...")
-        Task {
-            await PurchaseManager.shared.checkProStatus()
-            if PurchaseManager.shared._isPro {
-                await MainActor.run {
-                    showSuccess = true
-                }
-            } else {
-                // Try restore again to force sync
-                let restored = await PurchaseManager.shared.restoreAndCheck()
-                if restored {
-                    await MainActor.run {
-                        showSuccess = true
-                    }
-                } else {
-                    NSLog("[PaywallView] No active subscription found after restore")
-                }
-            }
-        }
-    }
 }
 
 // MARK: - Legacy PaywallView (alias for backwards compatibility)

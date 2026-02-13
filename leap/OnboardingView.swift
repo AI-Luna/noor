@@ -1057,10 +1057,23 @@ struct OnboardingView: View {
                 // Use RevenueCat's remote paywall configured in dashboard
                 RevenueCatUI.PaywallView(displayCloseButton: false)
                     .onPurchaseCompleted { customerInfo in
-                        handlePaywallCompletion(customerInfo: customerInfo, source: "Purchase")
+                        // Purchase succeeded (Apple confirmed) - navigate to main app
+                        NSLog("[OnboardingPaywall] onPurchaseCompleted delegate fired")
+                        NSLog("[OnboardingPaywall] Active entitlements: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")
+                        Task { await PurchaseManager.shared.checkProStatus() }
+                        saveUserAndComplete()
                     }
                     .onRestoreCompleted { customerInfo in
-                        handlePaywallCompletion(customerInfo: customerInfo, source: "Restore")
+                        // Restore completed - check if subscription is active
+                        NSLog("[OnboardingPaywall] onRestoreCompleted delegate fired")
+                        NSLog("[OnboardingPaywall] Active entitlements: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")
+                        let hasActiveSubscription = customerInfo.entitlements["Noor Pro"]?.isActive == true
+                        if hasActiveSubscription {
+                            Task { await PurchaseManager.shared.checkProStatus() }
+                            saveUserAndComplete()
+                        } else {
+                            NSLog("[OnboardingPaywall] Restore completed but no active 'Noor Pro' entitlement")
+                        }
                     }
                 
                 // Testing: skip paywall — faint arrow below restore area
@@ -1155,53 +1168,6 @@ struct OnboardingView: View {
         if restored {
             await MainActor.run {
                 saveUserAndComplete()
-            }
-        }
-    }
-    
-    /// Handle purchase or restore completion on paywall
-    private func handlePaywallCompletion(customerInfo: CustomerInfo, source: String) {
-        NSLog("[OnboardingPaywall] \(source) completed")
-        NSLog("[OnboardingPaywall] Active entitlements: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")
-        NSLog("[OnboardingPaywall] All entitlements: \(customerInfo.entitlements.all.keys.joined(separator: ", "))")
-        
-        let proActive = customerInfo.entitlements["Noor Pro"]?.isActive == true
-        
-        if proActive {
-            // Refresh global state and complete
-            Task { await PurchaseManager.shared.checkProStatus() }
-            saveUserAndComplete()
-            return
-        }
-        
-        // For PURCHASE: Apple confirmed it - proceed even if entitlement check fails (sync delay)
-        // For RESTORE: only proceed if entitlement is actually active
-        if source == "Purchase" {
-            NSLog("[OnboardingPaywall] Purchase confirmed by Apple - proceeding regardless of entitlement sync")
-            Task { await PurchaseManager.shared.checkProStatus() }
-            saveUserAndComplete()
-            return
-        }
-        
-        // Restore path: verify entitlement is actually active
-        NSLog("[OnboardingPaywall] Restore completed but pro not active - verifying...")
-        Task {
-            await PurchaseManager.shared.checkProStatus()
-            if PurchaseManager.shared._isPro {
-                await MainActor.run {
-                    saveUserAndComplete()
-                }
-            } else {
-                // Try restore again to force sync
-                NSLog("[OnboardingPaywall] Attempting restore sync...")
-                let restored = await PurchaseManager.shared.restoreAndCheck()
-                if restored {
-                    await MainActor.run {
-                        saveUserAndComplete()
-                    }
-                } else {
-                    NSLog("[OnboardingPaywall] No active subscription found after restore")
-                }
             }
         }
     }
