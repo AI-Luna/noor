@@ -59,6 +59,7 @@ struct OnboardingView: View {
     @State private var showItineraryHeader: Bool = false
     @State private var showItineraryChallenges: Bool = false
     @State private var paywallCheckComplete: Bool = false
+    @Environment(\.scenePhase) private var scenePhase
     
     // Splash animation states
     @State private var starOffset: CGSize = CGSize(width: -200, height: -300)
@@ -1073,6 +1074,22 @@ struct OnboardingView: View {
         .task {
             await checkSubscriptionOnPaywallAppear()
         }
+        // Re-check when app becomes active (catches "already subscribed" dialog dismissal)
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            if newPhase == .active && oldPhase == .inactive && paywallCheckComplete {
+                NSLog("[OnboardingPaywall] App became active - re-checking subscription status")
+                Task {
+                    await recheckAfterStoreInteraction()
+                }
+            }
+        }
+        // Also listen for RevenueCat customer info updates
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("com.revenuecat.purchases.customerInfo.updated"))) { _ in
+            NSLog("[OnboardingPaywall] CustomerInfo updated notification received")
+            Task {
+                await recheckAfterStoreInteraction()
+            }
+        }
     }
     
     /// Check subscription status when paywall appears - skip if already Pro
@@ -1089,6 +1106,21 @@ struct OnboardingView: View {
             NSLog("[OnboardingPaywall] No active subscription - showing paywall")
             await MainActor.run {
                 paywallCheckComplete = true
+            }
+        }
+    }
+    
+    /// Re-check status after Store Kit interaction (e.g., "already subscribed" dialog)
+    private func recheckAfterStoreInteraction() async {
+        // Small delay to let StoreKit/RevenueCat sync
+        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+        
+        await PurchaseManager.shared.checkProStatus()
+        
+        if PurchaseManager.shared._isPro {
+            NSLog("[OnboardingPaywall] User now has active subscription after re-check - completing")
+            await MainActor.run {
+                saveUserAndComplete()
             }
         }
     }
