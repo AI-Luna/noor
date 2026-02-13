@@ -35,10 +35,6 @@ struct MicrohabitsView: View {
     @State private var goals: [Goal] = []
     @State private var isLoading = true
     @State private var showAddHabitModal = false
-    @State private var showAddForm = false
-    @State private var pendingAddForm = false
-    @State private var selectedHabitType: MicrohabitType = .create
-    @State private var newHabitTitle = ""
     @State private var habitToEdit: Microhabit?
     @State private var showEditSheet = false
     @State private var habitForTimer: Microhabit?
@@ -156,7 +152,7 @@ struct MicrohabitsView: View {
                         // Add button
                         Button {
                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                            showAddForm = true
+                            showAddHabitModal = true
                         } label: {
                             Image(systemName: "plus")
                                 .font(.system(size: 20, weight: .semibold))
@@ -204,45 +200,13 @@ struct MicrohabitsView: View {
             } message: {
                 Text("Edit, archive, or delete this habit?")
             }
-            .sheet(isPresented: $showAddHabitModal, onDismiss: {
-                if pendingAddForm {
-                    pendingAddForm = false
-                    showAddForm = true
-                }
-            }) {
-                AddHabitModal(
-                    habitTitle: $newHabitTitle,
-                    onDismiss: {
-                        showAddHabitModal = false
-                        newHabitTitle = ""
-                    },
-                    onCreateHabit: {
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        selectedHabitType = .create
-                        pendingAddForm = true
-                        showAddHabitModal = false
-                    },
-                    onReplaceHabit: {
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        selectedHabitType = .replace
-                        pendingAddForm = true
-                        showAddHabitModal = false
-                    }
-                )
-            }
-            .sheet(isPresented: $showAddForm) {
+            .sheet(isPresented: $showAddHabitModal, onDismiss: loadData) {
                 AddMicrohabitView(
-                    initialType: selectedHabitType,
-                    initialTitle: newHabitTitle,
+                    initialType: .create,
                     goals: goals,
-                    onDismiss: {
-                        showAddForm = false
-                        newHabitTitle = ""
-                        loadData()
-                    },
+                    onDismiss: { showAddHabitModal = false },
                     onSave: {
-                        showAddForm = false
-                        newHabitTitle = ""
+                        showAddHabitModal = false
                         loadData()
                     }
                 )
@@ -304,7 +268,7 @@ struct MicrohabitsView: View {
                     onAddHabit: {
                         selectedScienceLesson = nil
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                            showAddForm = true
+                            showAddHabitModal = true
                         }
                     }
                 )
@@ -312,6 +276,7 @@ struct MicrohabitsView: View {
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(24)
             }
+            .preferredColorScheme(.dark)
         }
     }
 
@@ -393,15 +358,19 @@ struct MicrohabitsView: View {
             Button {
                 let generator = UIImpactFeedbackGenerator(style: .medium)
                 generator.impactOccurred()
-                showAddForm = true
+                showAddHabitModal = true
             } label: {
-                Text("Add a habit")
-                    .font(NoorFont.button)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(Color.noorSuccess)
-                    .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .bold))
+                    Text("Add a habit")
+                        .font(NoorFont.button)
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(Color.noorSuccess)
+                .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
             }
             .buttonStyle(.plain)
             .padding(.top, 8)
@@ -454,15 +423,19 @@ struct MicrohabitsView: View {
             Button {
                 let generator = UIImpactFeedbackGenerator(style: .medium)
                 generator.impactOccurred()
-                showAddForm = true
+                showAddHabitModal = true
             } label: {
-                Text("Add a habit")
-                    .font(NoorFont.button)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(Color.noorSuccess)
-                    .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .bold))
+                    Text("Add a habit")
+                        .font(NoorFont.button)
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(Color.noorSuccess)
+                .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
                     .shadow(color: Color.noorSuccess.opacity(0.5), radius: 16, x: 0, y: 0)
                     .shadow(color: Color.noorSuccess.opacity(0.3), radius: 24, x: 0, y: 4)
             }
@@ -501,15 +474,19 @@ struct MicrohabitsView: View {
             Button {
                 let generator = UIImpactFeedbackGenerator(style: .medium)
                 generator.impactOccurred()
-                showAddForm = true
+                showAddHabitModal = true
             } label: {
-                Text("Add a habit")
-                    .font(NoorFont.button)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(Color.noorSuccess)
-                    .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .bold))
+                    Text("Add a habit")
+                        .font(NoorFont.button)
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(Color.noorSuccess)
+                .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
                     .shadow(color: Color.noorSuccess.opacity(0.5), radius: 16, x: 0, y: 0)
                     .shadow(color: Color.noorSuccess.opacity(0.3), radius: 24, x: 0, y: 4)
             }
@@ -630,6 +607,7 @@ struct MicrohabitsView: View {
             } message: {
                 Text("Edit or delete this habit?")
             }
+            .preferredColorScheme(.dark)
         }
     }
 
@@ -876,13 +854,17 @@ struct HabitScienceLessonSheetContent: View {
                                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                                 onAddHabit()
                             } label: {
-                                Text("Add a habit")
-                                    .font(NoorFont.button)
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 52)
-                                    .background(Color.noorSuccess)
-                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                                HStack(spacing: 6) {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 18, weight: .bold))
+                                    Text("Add a habit")
+                                        .font(NoorFont.button)
+                                }
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 52)
+                                .background(Color.noorSuccess)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
                             }
                             .buttonStyle(.plain)
                             .padding(.top, 12)
@@ -1030,17 +1012,17 @@ struct MicrohabitCard: View {
     }
 }
 
-// MARK: - Add Habit Sheet (title entry + Create/Replace) — bottom sheet, drag to dismiss
-struct AddHabitModal: View {
-    @Binding var habitTitle: String
+// MARK: - Add Habit (simple one-step sheet)
+struct AddHabitSimpleSheet: View {
+    @Environment(DataManager.self) private var dataManager
     let onDismiss: () -> Void
-    let onCreateHabit: () -> Void
-    let onReplaceHabit: () -> Void
 
+    @State private var habitTitle = ""
+    @State private var isSaving = false
     @FocusState private var titleFocused: Bool
 
-    private var canProceed: Bool {
-        !habitTitle.trimmingCharacters(in: .whitespaces).isEmpty
+    private var canAdd: Bool {
+        !habitTitle.trimmingCharacters(in: .whitespaces).isEmpty && !isSaving
     }
 
     var body: some View {
@@ -1049,15 +1031,15 @@ struct AddHabitModal: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Top spacer so content stays at top (matches Science of micro habits sheet)
-                Spacer()
-                    .frame(height: 24)
-
-                // Header with seamless close
-                HStack(alignment: .center) {
-                    Text("Add a habit")
-                        .font(NoorFont.largeTitle)
-                        .foregroundStyle(.white)
+                Spacer().frame(height: 24)
+                HStack {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 28, weight: .bold))
+                        Text("Add a habit")
+                            .font(NoorFont.largeTitle)
+                            .foregroundStyle(.white)
+                    }
                     Spacer()
                     Button(action: onDismiss) {
                         Image(systemName: "xmark")
@@ -1067,7 +1049,6 @@ struct AddHabitModal: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 12)
                 .padding(.bottom, 16)
 
                 VStack(alignment: .leading, spacing: 12) {
@@ -1077,46 +1058,48 @@ struct AddHabitModal: View {
                     TextField("e.g. 2-page journal session", text: $habitTitle)
                         .textFieldStyle(.plain)
                         .font(NoorFont.body)
-                        .foregroundStyle(Color.noorTextSecondary)
+                        .foregroundStyle(.white)
                         .padding(16)
-                        .background(Color.white.opacity(0.12))
+                        .background(Color.white.opacity(0.08))
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                         .overlay(
                             RoundedRectangle(cornerRadius: 14)
-                                .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
                         )
                         .focused($titleFocused)
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 24)
+                .padding(.bottom, 28)
 
-                VStack(spacing: 12) {
-                    AddHabitOptionRow(
-                        icon: "plus.circle.fill",
-                        iconColor: canProceed ? Color.noorSuccess : Color.noorTextSecondary.opacity(0.5),
-                        title: "Create a habit",
-                        subtitle: "Start a new habit that will have remarkable results.",
-                        action: onCreateHabit
-                    )
-                    .opacity(canProceed ? 1 : 0.5)
-                    .allowsHitTesting(canProceed)
-
-                    AddHabitOptionRow(
-                        icon: "arrow.triangle.2.circlepath",
-                        iconColor: canProceed ? Color.noorTextSecondary : Color.noorTextSecondary.opacity(0.5),
-                        title: "Replace a bad habit",
-                        subtitle: "Trade what drains you for what grows you.",
-                        action: onReplaceHabit
-                    )
-                    .opacity(canProceed ? 1 : 0.5)
-                    .allowsHitTesting(canProceed)
+                Button {
+                    addHabit()
+                } label: {
+                    HStack(spacing: 8) {
+                        if isSaving {
+                            ProgressView()
+                                .tint(.white)
+                                .scaleEffect(0.9)
+                        } else {
+                            Image(systemName: "plus")
+                                .font(.system(size: 18, weight: .bold))
+                        }
+                        Text("Add habit")
+                            .font(NoorFont.button)
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(canAdd ? Color.noorSuccess : Color.noorSuccess.opacity(0.4))
+                    .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
                 }
+                .buttonStyle(.plain)
+                .disabled(!canAdd)
                 .padding(.horizontal, 20)
-                .padding(.bottom, 32)
+                Spacer()
             }
             .frame(maxHeight: .infinity, alignment: .top)
         }
-        .presentationDetents([.large])
+        .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(24)
         .onAppear {
@@ -1125,53 +1108,35 @@ struct AddHabitModal: View {
             }
         }
     }
-}
 
-struct AddHabitOptionRow: View {
-    let icon: String
-    let iconColor: Color
-    let title: String
-    let subtitle: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(alignment: .center, spacing: 14) {
-                Image(systemName: icon)
-                    .font(.system(size: 24))
-                    .foregroundStyle(iconColor)
-                    .frame(width: 44, height: 44)
-                    .background(iconColor.opacity(0.2))
-                    .clipShape(Circle())
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(title)
-                        .font(NoorFont.title)
-                        .foregroundStyle(.white)
-
-                    Text(subtitle)
-                        .font(NoorFont.bodyLarge)
-                        .foregroundStyle(Color.noorTextSecondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.noorSuccess.opacity(0.8))
+    private func addHabit() {
+        let trimmed = habitTitle.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !isSaving else { return }
+        isSaving = true
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Task { @MainActor in
+            do {
+                let habit = Microhabit(
+                    title: trimmed,
+                    habitDescription: "",
+                    goalID: nil,
+                    customTag: nil,
+                    focusDurationMinutes: 5,
+                    type: .create,
+                    timeframe: .anytime,
+                    habitHour: nil,
+                    habitMinute: nil,
+                    reminderFrequency: .never,
+                    reminderDaysRaw: nil,
+                    reminderHour: 9,
+                    reminderMinute: 0
+                )
+                try await dataManager.saveMicrohabit(habit)
+                onDismiss()
+            } catch {
+                isSaving = false
             }
-            .frame(minHeight: 76)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-            )
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -1269,73 +1234,31 @@ struct AddMicrohabitView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        // SECTION 1: Vision & Purpose
+                        // Habit name (required) — always show so new-habit flow works
                         VStack(alignment: .leading, spacing: 12) {
-                            // Title section: only when editing; new habits get title from the initial popup
-                            if existing != nil {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Habit title")
-                                        .font(NoorFont.bodyLarge)
-                                        .foregroundStyle(Color.noorTextSecondary)
-                                    TextField("e.g. 2-page journal session", text: $title)
-                                        .textFieldStyle(.plain)
-                                        .font(NoorFont.body)
-                                        .foregroundStyle(Color.noorTextSecondary)
-                                        .padding(14)
-                                        .background(Color.white.opacity(0.08))
-                                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                                }
-                            }
-
-                            Text("How it supports your vision")
+                            Text("Name of habit")
                                 .font(NoorFont.title)
                                 .foregroundStyle(.white)
-                            TextField("I will ... so that I can become ...", text: $habitDescription, axis: .vertical)
+                            TextField("e.g. 2-page journal session", text: $title)
                                 .textFieldStyle(.plain)
                                 .font(NoorFont.body)
-                                .foregroundStyle(Color.noorTextSecondary)
-                                .lineLimit(3...8)
+                                .foregroundStyle(.white)
                                 .padding(14)
                                 .background(Color.white.opacity(0.08))
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                            // Link to journey
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack(spacing: 4) {
-                                    Text("Link to a journey")
-                                        .font(NoorFont.bodyLarge)
-                                        .foregroundStyle(Color.noorTextSecondary)
-                                    Text("(optional)")
-                                        .font(NoorFont.bodyLarge)
-                                        .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
-                                }
-                                Picker("Journey", selection: $selectedGoalID) {
-                                    Text("Stand-alone habit").tag(nil as String?)
-                                    ForEach(goals, id: \.id) { goal in
-                                        Text(goal.destination.isEmpty ? goal.title : goal.destination)
-                                            .lineLimit(1)
-                                            .tag(goal.id.uuidString as String?)
-                                    }
-                                }
-                                .pickerStyle(.menu)
-                                .tint(.white)
-                                .padding(.vertical, 4)
-                                .padding(.horizontal, 14)
-                                .background(Color.white.opacity(0.08))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                            }
                         }
                         .padding(16)
                         .background(Color.white.opacity(0.04))
                         .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                        // SECTION 2: Scheduling
-                        VStack(alignment: .leading, spacing: 16) {
+                        // Time of day (required for add flow; optional for edit)
+                        VStack(alignment: .leading, spacing: 12) {
                             Text("Schedule")
                                 .font(NoorFont.title)
                                 .foregroundStyle(.white)
-
-                            // Habit time
+                            Text("When do you want to do this habit?")
+                                .font(NoorFont.bodyLarge)
+                                .foregroundStyle(Color.noorTextSecondary)
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Time of day")
@@ -1368,54 +1291,6 @@ struct AddMicrohabitView: View {
                             .padding(14)
                             .background(Color.white.opacity(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                            // Focus timer
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("Focus timer")
-                                    .font(NoorFont.bodyLarge)
-                                    .foregroundStyle(Color.noorTextSecondary)
-                                HStack(spacing: 8) {
-                                    ForEach(focusPresetOptions, id: \.self) { min in
-                                        Button {
-                                            focusMinutes = min
-                                        } label: {
-                                            Text("\(min)")
-                                                .font(NoorFont.callout)
-                                                .foregroundStyle(focusMinutes == min ? .white : Color.noorTextSecondary)
-                                                .frame(width: 44, height: 36)
-                                                .background(focusMinutes == min ? Color.noorSuccess : Color.white.opacity(0.08))
-                                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                    Button {
-                                        focusMinutes = 0
-                                    } label: {
-                                        Text("Off")
-                                            .font(NoorFont.callout)
-                                            .foregroundStyle(focusMinutes == 0 ? .white : Color.noorTextSecondary)
-                                            .frame(width: 44, height: 36)
-                                            .background(focusMinutes == 0 ? Color.noorSuccess : Color.white.opacity(0.08))
-                                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                                    }
-                                    .buttonStyle(.plain)
-                                    Spacer()
-                                    Text("\(focusMinutes) min")
-                                        .font(NoorFont.caption)
-                                        .foregroundStyle(Color.noorTextSecondary)
-                                }
-                                if focusMinutes > 0 {
-                                    Slider(
-                                        value: Binding(
-                                            get: { Double(focusMinutes) },
-                                            set: { focusMinutes = Int($0) }
-                                        ),
-                                        in: 1...60,
-                                        step: 1
-                                    )
-                                    .tint(Color.noorSuccess)
-                                }
-                            }
                         }
                         .padding(16)
                         .background(Color.white.opacity(0.04))
@@ -1432,13 +1307,14 @@ struct AddMicrohabitView: View {
                                     showHabitTimeSheet = false
                                 }
                             )
-                            .presentationDetents([.medium, .large])
+                            .presentationDetents([.fraction(0.45)])
+                            .presentationDragIndicator(.visible)
                         }
 
-                        // SECTION 3: Reminders
+                        // Remind me — same for new and edit (simple toggle)
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
-                                Text("Reminders")
+                                Text("Remind me at this time")
                                     .font(NoorFont.title)
                                     .foregroundStyle(.white)
                                 Spacer()
@@ -1447,6 +1323,7 @@ struct AddMicrohabitView: View {
                                     set: {
                                         if $0 {
                                             reminderFrequency = .daily
+                                            reminderDays = [0, 1, 2, 3, 4, 5, 6]
                                         } else {
                                             reminderFrequency = .never
                                             reminderDays = []
@@ -1456,39 +1333,99 @@ struct AddMicrohabitView: View {
                                 .labelsHidden()
                                 .tint(Color.noorSuccess)
                             }
+                            .padding(14)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                        .padding(16)
+                        .background(Color.white.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                            if reminderFrequency != .never {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Text("Repeat on")
-                                        .font(NoorFont.bodyLarge)
-                                        .foregroundStyle(Color.noorTextSecondary)
-                                    HStack(spacing: 8) {
-                                        ForEach(0..<7, id: \.self) { day in
-                                            Button {
-                                                if reminderDays.contains(day) {
-                                                    reminderDays.remove(day)
-                                                } else {
-                                                    reminderDays.insert(day)
-                                                }
-                                            } label: {
-                                                Text(Self.weekdayLetters[day])
-                                                    .font(.system(size: 14, weight: .semibold))
-                                                    .foregroundStyle(reminderDays.contains(day) ? .white : Color.noorTextSecondary)
-                                                    .frame(width: 36, height: 36)
-                                                    .background(reminderDays.contains(day) ? Color.noorSuccess : Color.white.opacity(0.08))
-                                                    .clipShape(Circle())
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
+                        // Focus time — same for new and edit
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Focus time")
+                                .font(NoorFont.title)
+                                .foregroundStyle(.white)
+                            Text("Minutes to focus when you start this habit")
+                                .font(NoorFont.bodyLarge)
+                                .foregroundStyle(Color.noorTextSecondary)
+                            HStack(spacing: 8) {
+                                ForEach(focusPresetOptions, id: \.self) { min in
+                                    Button {
+                                        focusMinutes = min
+                                    } label: {
+                                        Text("\(min)")
+                                            .font(NoorFont.callout)
+                                            .foregroundStyle(focusMinutes == min ? .white : Color.noorTextSecondary)
+                                            .frame(width: 44, height: 36)
+                                            .background(focusMinutes == min ? Color.noorSuccess : Color.white.opacity(0.08))
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
                                     }
+                                    .buttonStyle(.plain)
+                                }
+                                Button {
+                                    focusMinutes = 0
+                                } label: {
+                                    Text("Off")
+                                        .font(NoorFont.callout)
+                                        .foregroundStyle(focusMinutes == 0 ? .white : Color.noorTextSecondary)
+                                        .frame(width: 44, height: 36)
+                                        .background(focusMinutes == 0 ? Color.noorSuccess : Color.white.opacity(0.08))
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                }
+                                .buttonStyle(.plain)
+                                Spacer()
+                                Text("\(focusMinutes) min")
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                            }
+                            if focusMinutes > 0 {
+                                Slider(
+                                    value: Binding(
+                                        get: { Double(focusMinutes) },
+                                        set: { focusMinutes = Int($0) }
+                                    ),
+                                    in: 1...60,
+                                    step: 1
+                                )
+                                .tint(Color.noorSuccess)
+                            }
+                        }
+                        .padding(16)
+                        .background(Color.white.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                                    Text("Remind me")
-                                        .font(NoorFont.bodyLarge)
-                                        .foregroundStyle(Color.noorTextSecondary)
-                                        .padding(.top, 4)
-                                    Picker("Reminder time", selection: $reminderTimeOffset) {
-                                        ForEach(ReminderTimeOffset.allCases) { offset in
-                                            Text(offset.displayName).tag(offset)
+                        // Optional sections only when editing
+                        if existing != nil {
+                            // Vision & link (edit only)
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("How it supports your vision")
+                                    .font(NoorFont.title)
+                                    .foregroundStyle(.white)
+                                TextField("I will ... so that I can become ...", text: $habitDescription, axis: .vertical)
+                                    .textFieldStyle(.plain)
+                                    .font(NoorFont.body)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                                    .lineLimit(3...8)
+                                    .padding(14)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack(spacing: 4) {
+                                        Text("Link to a journey")
+                                            .font(NoorFont.bodyLarge)
+                                            .foregroundStyle(Color.noorTextSecondary)
+                                        Text("(optional)")
+                                            .font(NoorFont.bodyLarge)
+                                            .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
+                                    }
+                                    Picker("Journey", selection: $selectedGoalID) {
+                                        Text("Stand-alone habit").tag(nil as String?)
+                                        ForEach(goals, id: \.id) { goal in
+                                            Text(goal.destination.isEmpty ? goal.title : goal.destination)
+                                                .lineLimit(1)
+                                                .tag(goal.id.uuidString as String?)
                                         }
                                     }
                                     .pickerStyle(.menu)
@@ -1498,15 +1435,11 @@ struct AddMicrohabitView: View {
                                     .background(Color.white.opacity(0.08))
                                     .clipShape(RoundedRectangle(cornerRadius: 12))
                                 }
-                            } else {
-                                Text("Turn on to get reminded of this habit.")
-                                    .font(NoorFont.caption)
-                                    .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
                             }
+                            .padding(16)
+                            .background(Color.white.opacity(0.04))
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
                         }
-                        .padding(16)
-                        .background(Color.white.opacity(0.04))
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
 
                         Button {
                             print("🔘 Add habit button tapped - canSave: \(canSave), isSaving: \(isSaving)")
@@ -1711,7 +1644,7 @@ private struct HabitTimePickerSheet: View {
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 52)
-                                .background(Color.noorViolet)
+                                .background(Color.noorSuccess)
                                 .clipShape(RoundedRectangle(cornerRadius: 16))
                         }
                         .buttonStyle(.plain)

@@ -349,19 +349,26 @@ final class TravelPin: Identifiable {
     var country: String          // e.g. "France"
     var dateVisited: Date
     var createdAt: Date
+    /// User-selected position on the map (0...1). When nil, a fallback position is used.
+    var mapPositionX: Double?
+    var mapPositionY: Double?
 
     init(
         id: UUID = UUID(),
         destination: String,
         country: String,
         dateVisited: Date = .now,
-        createdAt: Date = .now
+        createdAt: Date = .now,
+        mapPositionX: Double? = nil,
+        mapPositionY: Double? = nil
     ) {
         self.id = id
         self.destination = destination
         self.country = country
         self.dateVisited = dateVisited
         self.createdAt = createdAt
+        self.mapPositionX = mapPositionX
+        self.mapPositionY = mapPositionY
     }
 }
 

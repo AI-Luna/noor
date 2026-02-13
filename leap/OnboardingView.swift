@@ -9,6 +9,7 @@
 
 import SwiftUI
 import RevenueCat
+import RevenueCatUI
 import UserNotifications
 
 // MARK: - Onboarding quotes (trickled in where they match the question/concept)
@@ -136,8 +137,8 @@ struct OnboardingView: View {
             headline: "Reduce friction. Take action instantly.",
             subheadline: nil,
             body: [
-                "Your vision board lives inside each journey.",
-                "Pin a Pinterest board, save an Instagram profile, book a flight. Open any of them in one tap."
+                "Add a vision to your dream.",
+                "Noor will add a link to turn that vision into action."
             ],
             quote: nil
         ),
@@ -151,7 +152,7 @@ struct OnboardingView: View {
             subheadline: nil,
             body: [
                 "Beyond your dream life, keep tabs on the real places you\u{2019}ve traveled.",
-                "Pin every vacation. Watch your world fill up."
+                "Watch your world fill up."
             ],
             quote: OnboardingQuotes.travel
         )
@@ -177,10 +178,9 @@ struct OnboardingView: View {
                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                         advanceScreen()
-                        generateItinerary()
                     }
                 })
-                case 10: aiGenerationScreen
+                case 10: planningTripScreen
                 case 11: itineraryRevealScreen
                 case 12: paywallScreen
                 default: splashScreen
@@ -307,31 +307,44 @@ struct OnboardingView: View {
     private var swipeableIntroScreen: some View {
         VStack(spacing: 0) {
             TabView(selection: $introPage) {
-                // Page 1: Built on motivation / behavioral science (Noor was already shown in splash)
+                // Page 1: Motivation (behavioral science) — type-in "I'll start when I feel ready." then strikethrough "start when" -> "I'm ready."
                 TypewriterIntroPageView(onContinue: {
                     withAnimation(.easeInOut(duration: 0.5)) { introPage = 2 }
                 })
                 .tag(1)
                 .transition(.opacity)
                 
-                // Rest of pages (indices 2–5)
+                // Page 2: "Noor turns your big dreams into daily micro-actions."
+                NoorMissionStatementView(onContinue: {
+                    withAnimation(.easeInOut(duration: 0.5)) { introPage = 3 }
+                })
+                .tag(2)
+                .transition(.opacity)
+                
+                // Rest of pages (indices 3+)
                 ForEach(Array(introPages.dropFirst().enumerated()), id: \.element.id) { offset, page in
                     IntroPageView(page: page)
-                        .tag(offset + 2)
+                        .tag(offset + 3)
                         .transition(.opacity)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .animation(.easeInOut(duration: 0.5), value: introPage)
+            .onChange(of: introPage) { _, newPage in
+                // Request notification permission when the "repeated tasks" / notifications screen appears (page id 4)
+                if newPage == 4 {
+                    requestNotificationPermission()
+                }
+            }
             
-            // Bottom controls — only show from "Travel Agency" page onwards (page 2+)
-            if introPage >= 2 {
-                let lastPage = introPages.count // final tag = 6
+            // Bottom controls — only show from "Travel Agency" page onwards (page 3+)
+            if introPage >= 3 {
+                let lastPage = introPages.count + 1 // +1 for the mission statement page (total pages = intro count + 2 special pages, last tag = count + 2)
                 VStack(spacing: 20) {
-                    // Page indicator dots (hide on final page)
+                    // Page indicator dots (hide on final page) - starts from page 3 (Travel Agency)
                     if introPage < lastPage {
                         HStack(spacing: 8) {
-                            ForEach(2...lastPage, id: \.self) { index in
+                            ForEach(3...lastPage, id: \.self) { index in
                                 Capsule()
                                     .fill(index == introPage ? Color.white : Color.white.opacity(0.3))
                                     .frame(width: index == introPage ? 24 : 8, height: 8)
@@ -345,7 +358,6 @@ struct OnboardingView: View {
                         if introPage < lastPage {
                             withAnimation(.easeInOut(duration: 0.5)) { introPage += 1 }
                         } else {
-                            requestNotificationPermission()
                             withAnimation(.easeInOut(duration: 0.5)) {
                                 currentScreen = 3
                             }
@@ -386,35 +398,36 @@ struct OnboardingView: View {
     // MARK: - Screen 3: Destination Selection
     private var destinationSelectionScreen: some View {
         VStack(spacing: 0) {
-            Spacer()
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Let's book your first flight.")
-                    .font(NoorFont.largeTitle)
-                    .foregroundStyle(.white)
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Every journey has a destination.")
+                        .font(NoorFont.largeTitle)
+                        .foregroundStyle(.white)
 
-                Text("Where are you traveling first?")
-                    .font(NoorFont.onboardingBodyLarge)
-                    .foregroundStyle(Color.noorTextSecondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 28)
+                    Text("Where are you headed first?")
+                        .font(NoorFont.onboardingBodyLarge)
+                        .foregroundStyle(Color.noorTextSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 28)
 
-            VStack(spacing: 10) {
-                ForEach(GoalCategory.allCases) { category in
-                    CategorySelectionRow(
-                        category: category,
-                        isSelected: selectedCategory == category
-                    ) {
-                        hapticLight()
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            selectedCategory = category
+                VStack(spacing: 10) {
+                    ForEach(GoalCategory.allCases) { category in
+                        CategorySelectionRow(
+                            category: category,
+                            isSelected: selectedCategory == category
+                        ) {
+                            hapticLight()
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedCategory = category
+                            }
                         }
                     }
                 }
+                Spacer(minLength: 0)
             }
-            
-            Spacer()
+            .frame(maxHeight: .infinity)
 
             OnboardingTextButton(
                 title: selectedCategory == nil ? "Select one to start" : "Continue",
@@ -431,37 +444,37 @@ struct OnboardingView: View {
     // MARK: - Screen 4: Science (after destination)
     private var scienceAfterDestinationScreen: some View {
         VStack(spacing: 0) {
-            Spacer()
-            
-            VStack(alignment: .leading, spacing: 24) {
-                Image(systemName: "pencil.and.list.clipboard")
-                    .font(.system(size: 48))
-                    .foregroundStyle(Color.noorRoseGold)
-
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Why writing it down works.")
-                        .font(NoorFont.largeTitle)
-                        .foregroundStyle(Color.noorTextPrimary)
-                        .italic()
-
-                    Rectangle()
-                        .fill(Color.noorRoseGold.opacity(0.5))
-                        .frame(width: 60, height: 2)
-
-                    Text("Writing your goal turns a wish into a plan your brain can act on.")
-                        .font(NoorFont.title2)
-                        .foregroundStyle(Color.noorTextSecondary)
-
-                    Text(OnboardingQuotes.writing)
-                        .font(NoorFont.onboardingBody)
-                        .italic()
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 24) {
+                    Image(systemName: "pencil.and.list.clipboard")
+                        .font(.system(size: 48))
                         .foregroundStyle(Color.noorRoseGold)
-                        .padding(.top, 8)
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Why writing it down works.")
+                            .font(NoorFont.largeTitle)
+                            .foregroundStyle(Color.noorTextPrimary)
+
+                        Rectangle()
+                            .fill(Color.noorRoseGold.opacity(0.5))
+                            .frame(width: 60, height: 2)
+
+                        Text("Writing your goal turns a wish into a plan your brain can act on.")
+                            .font(NoorFont.title2)
+                            .foregroundStyle(Color.noorTextSecondary)
+
+                        Text(OnboardingQuotes.writing)
+                            .font(NoorFont.onboardingBody)
+                            .italic()
+                            .foregroundStyle(Color.noorRoseGold)
+                            .padding(.top, 8)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            
-            Spacer()
+            .frame(maxHeight: .infinity)
 
             OnboardingTextButton(title: "Continue") {
                 hapticLight()
@@ -472,7 +485,22 @@ struct OnboardingView: View {
         .padding(.horizontal, NoorLayout.horizontalPadding)
     }
 
-    // MARK: - Screen 8: AI Generation Loading (Personalized, flight-details vibe)
+    // MARK: - Screen 10: Planning Your Trip (progress ring with incremental steps)
+    @State private var planningProgress: CGFloat = 0
+    @State private var planningStepIndex: Int = 0
+    @State private var planningTextOpacity: Double = 0
+    @State private var planningComplete: Bool = false
+
+    private let planningSteps: [(text: String, duration: Double)] = [
+        ("Reviewing your destination...", 1.2),
+        ("Mapping the best route...", 1.4),
+        ("Checking travel conditions...", 1.0),
+        ("Preparing your itinerary...", 1.3),
+        ("Packing your boarding pass...", 1.1),
+        ("Ready for takeoff!", 0.8)
+    ]
+
+    // MARK: - Screen 11: AI Generation Loading (Personalized, flight-details vibe)
     @State private var loadingPhraseIndex: Int = 0
     @State private var loadingPhraseOpacity: Double = 0
     @State private var loadingCircleRotation: Double = 0
@@ -504,6 +532,129 @@ struct OnboardingView: View {
         phrases.append("Building your boarding pass...")
         phrases.append("Preparing for takeoff...")
         return phrases
+    }
+
+    // MARK: - Planning Your Trip Screen (progress ring with incremental checkmarks)
+    private var planningTripScreen: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            // Progress ring
+            ZStack {
+                // Background circle
+                Circle()
+                    .stroke(Color.white.opacity(0.15), lineWidth: 12)
+                    .frame(width: 180, height: 180)
+
+                // Progress arc (hot pink)
+                Circle()
+                    .trim(from: 0, to: planningProgress)
+                    .stroke(
+                        Color.noorAccent,
+                        style: StrokeStyle(lineWidth: 12, lineCap: .round)
+                    )
+                    .frame(width: 180, height: 180)
+                    .rotationEffect(.degrees(-90))
+
+                // Percentage text
+                Text("\(Int(planningProgress * 100))%")
+                    .font(.system(size: 42, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+            }
+            .padding(.bottom, 40)
+
+            // Step indicators (checkmarks)
+            HStack(spacing: 12) {
+                ForEach(0..<planningSteps.count, id: \.self) { index in
+                    ZStack {
+                        Circle()
+                            .fill(index < planningStepIndex ? Color.noorSuccess : Color.white.opacity(0.15))
+                            .frame(width: 28, height: 28)
+
+                        if index < planningStepIndex {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                    }
+                }
+            }
+            .padding(.bottom, 32)
+
+            // Current step text
+            Text(planningSteps[min(planningStepIndex, planningSteps.count - 1)].text)
+                .font(NoorFont.title)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .opacity(planningTextOpacity)
+                .frame(height: 32)
+                .padding(.horizontal, 32)
+
+            Spacer()
+        }
+        .onAppear {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            startPlanningAnimation()
+        }
+    }
+
+    private func startPlanningAnimation() {
+        planningProgress = 0
+        planningStepIndex = 0
+        planningTextOpacity = 0
+        planningComplete = false
+
+        // Start generating itinerary immediately so it's ready when animation finishes
+        generateItinerary()
+
+        // Fade in first text
+        withAnimation(.easeIn(duration: 0.4)) {
+            planningTextOpacity = 1
+        }
+
+        // Calculate total duration and progress per step
+        let totalSteps = planningSteps.count
+        var cumulativeDelay: Double = 0
+
+        for (index, step) in planningSteps.enumerated() {
+            let stepDelay = cumulativeDelay
+            let targetProgress = CGFloat(index + 1) / CGFloat(totalSteps)
+
+            // Animate progress ring incrementally (with slight variation)
+            DispatchQueue.main.asyncAfter(deadline: .now() + stepDelay) {
+                withAnimation(.easeInOut(duration: step.duration * 0.8)) {
+                    planningProgress = targetProgress
+                }
+            }
+
+            // Update step index and text
+            if index < totalSteps - 1 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + stepDelay + step.duration * 0.6) {
+                    // Fade out current text
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        planningTextOpacity = 0
+                    }
+
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        planningStepIndex = index + 1
+                        // Fade in new text
+                        withAnimation(.easeIn(duration: 0.3)) {
+                            planningTextOpacity = 1
+                        }
+                    }
+                }
+            }
+
+            cumulativeDelay += step.duration
+        }
+
+        // After all steps complete, advance to next screen
+        DispatchQueue.main.asyncAfter(deadline: .now() + cumulativeDelay + 0.5) {
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            planningComplete = true
+            advanceScreen()
+        }
     }
 
     private var aiGenerationScreen: some View {
@@ -601,6 +752,18 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 20) {
+                    // Heading above boarding pass
+                    Text("Departing: Right Now")
+                        .font(NoorFont.title)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.top, 30)
+                        .padding(.bottom, 8)
+                        .opacity(showItineraryHeader ? 1 : 0)
+                        .offset(y: showItineraryHeader ? 0 : -10)
+
                     // Boarding pass on top with real user info
                     VStack(spacing: 0) {
                         HStack {
@@ -728,13 +891,13 @@ struct OnboardingView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     .opacity(showItineraryHeader ? 1 : 0)
                     .offset(y: showItineraryHeader ? 0 : -10)
-                    .padding(.top, 30)
 
                     // 7-Step Journey — fades in below the boarding pass
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Your 7-Step Journey")
                             .font(NoorFont.title)
                             .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.bottom, 4)
                             .opacity(showItineraryChallenges ? 1 : 0)
 
@@ -871,6 +1034,36 @@ struct OnboardingView: View {
     }
 
     private var paywallScreen: some View {
+        ZStack(alignment: .bottom) {
+            // Use RevenueCat's remote paywall configured in dashboard
+            RevenueCatUI.PaywallView(displayCloseButton: false)
+                .onPurchaseCompleted { customerInfo in
+                    print("Purchase completed: \(customerInfo.entitlements)")
+                    if customerInfo.entitlements["pro"]?.isActive == true {
+                        saveUserAndComplete()
+                    }
+                }
+                .onRestoreCompleted { customerInfo in
+                    print("Restore completed: \(customerInfo.entitlements)")
+                    if customerInfo.entitlements["pro"]?.isActive == true {
+                        saveUserAndComplete()
+                    }
+                }
+            
+            // Testing: skip paywall — faint arrow below restore area
+            Button {
+                saveUserAndComplete()
+            } label: {
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.25))
+            }
+            .padding(.bottom, 24)
+        }
+    }
+    
+    // MARK: - Legacy custom paywall (no longer used - keeping for reference)
+    private var legacyPaywallScreen: some View {
         ZStack {
             VStack(spacing: 0) {
                 ScrollView {
@@ -994,11 +1187,6 @@ struct OnboardingView: View {
                     boardingPass = result.encouragement
                 }
                 isGenerating = false
-                if currentScreen == 10 {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        currentScreen = 11
-                    }
-                }
             }
         }
     }
@@ -1102,41 +1290,33 @@ struct OnboardingView: View {
     }
 }
 
-// MARK: - Typewriter Intro Page (Built on motivation / behavioral science — no "Noor" on this page)
+// MARK: - Typewriter Intro Page — "I'll start when I'm ready." type to period, strikethrough "I'll start when", then Continue
 private struct TypewriterIntroPageView: View {
     let onContinue: () -> Void
 
-    // Reveal animation states
     @State private var revealProgress: CGFloat = 0
     @State private var hasStartedTypewriter: Bool = false
 
-    // Phase tracking
-    // 0: Typing "Welcome to Noor"
-    // 1: Deleting "Welcome to Noor"
-    // 2: Typing "Built on "
-    // 3: Typing "motivation"
-    // 4: Strikethrough "motivation" (stays visible, crossed out)
-    // 5: Typing "behavioral science." below
-    // 6: Show rest of content
+    // Phase: 0 = typing (single string = no line-wrap jump), 1 = strikethrough "I'll start when", 4 = show Continue
     @State private var phase: Int = 0
 
-    // Text states
-    @State private var welcomeText: String = ""
-    @State private var builtOnText: String = ""
-    @State private var motivationText: String = ""
+    /// Single string during typing so layout wraps smoothly (no jump from line 1 to line 2)
+    @State private var typedText: String = ""
+    @State private var illStartWhenText: String = ""
+    @State private var statementSuffix: String = ""
     @State private var strikethroughProgress: CGFloat = 0
-    @State private var motivationFaded: Bool = false
-    @State private var behavioralScienceText: String = ""
+    @State private var struckTextFaded: Bool = false
     @State private var showCursor: Bool = true
     @State private var cursorTimer: Timer?
-
-    // Content fade states
     @State private var buttonOpacity: Double = 0
 
-    private let fullWelcome = "Welcome to Noor"
-    private let builtOnFull = "Built on "
-    private let motivationFull = "motivation."
-    private let behavioralScienceFull = "behavioral science."
+    private let line1 = "I'll start when"
+    private let line2 = "I'm ready."
+    private let illStartWhen = "I'll start when"
+
+    private let typewriterFont = Font.system(size: 48, weight: .regular, design: .serif)
+    private let cursorHeight: CGFloat = 48
+    private let onboardingFont = NoorFont.onboardingBodyLarge
 
     var body: some View {
         GeometryReader { geo in
@@ -1144,72 +1324,53 @@ private struct TypewriterIntroPageView: View {
                 VStack(spacing: 0) {
                     Spacer()
 
-                    // Main text area — "Built on motivation" -> "behavioral science."
-                    VStack(alignment: .leading, spacing: 0) {
-                        ZStack(alignment: .topLeading) {
-                            // "Built on motivation" -> strikethrough -> "behavioral science."
-                            VStack(alignment: .leading, spacing: 6) {
-                                // Line 1: "Built on motivation." with strikethrough
-                                HStack(spacing: 0) {
-                                    Text(builtOnText)
-                                        .font(.system(size: 32, weight: .regular))
-                                        .foregroundStyle(.white)
-
-                                    // motivation typed then struck through
-                                    if !motivationText.isEmpty {
-                                        ZStack(alignment: .leading) {
-                                            Text(motivationText)
-                                                .font(.system(size: 32, weight: .regular))
-                                                .foregroundStyle(motivationFaded ? Color.noorTextSecondary.opacity(0.4) : .white)
-
-                                            // Strikethrough line
-                                            GeometryReader { textGeo in
-                                                Rectangle()
-                                                    .fill(Color.noorAccent)
-                                                    .frame(width: textGeo.size.width * strikethroughProgress, height: 3)
-                                                    .offset(y: textGeo.size.height / 2 - 1.5)
-                                            }
-                                        }
-                                        .fixedSize()
-                                    }
-
-                                    // Cursor while typing "Built on " or "motivation"
-                                    if showCursor && (phase == 2 || phase == 3) {
-                                        Rectangle()
-                                            .fill(Color.noorAccent)
-                                            .frame(width: 3, height: 32)
-                                    }
-                                }
-
-                                // Line 2: "behavioral science." typed in after strikethrough
-                                HStack(spacing: 0) {
-                                    Text(behavioralScienceText)
-                                        .font(.system(size: 32, weight: .regular))
-                                        .foregroundStyle(Color.noorAccent)
-
-                                    if showCursor && phase == 5 {
-                                        Rectangle()
-                                            .fill(Color.noorAccent)
-                                            .frame(width: 3, height: 32)
-                                    }
-                                }
-                                .opacity(behavioralScienceText.isEmpty ? 0 : 1)
+                    // Typing: two fixed lines to prevent word jumping. Cursor follows each character.
+                    VStack(alignment: .leading, spacing: 4) {
+                        if phase == 0 {
+                            // Line 1: "I'll start when" with cursor if still typing line 1
+                            let typingLine1 = typedText.count <= line1.count
+                            let line1Text = String(typedText.prefix(line1.count))
+                            
+                            (Text(line1Text)
+                                .font(typewriterFont)
+                                .foregroundStyle(.white)
+                             + Text(typingLine1 && showCursor ? "|" : "")
+                                .font(typewriterFont)
+                                .foregroundStyle(Color.noorAccent))
+                            
+                            // Line 2: "I'm ready." (only shows when typing past line 1)
+                            if typedText.count > line1.count {
+                                let line2Text = String(typedText.dropFirst(line1.count + 1)) // +1 for space
+                                (Text(line2Text)
+                                    .font(typewriterFont)
+                                    .foregroundStyle(.white)
+                                 + Text(showCursor ? "|" : "")
+                                    .font(typewriterFont)
+                                    .foregroundStyle(Color.noorAccent))
                             }
+                        } else {
+                            // After typing: strikethrough on line 1
+                            Text(illStartWhenText)
+                                .font(typewriterFont)
+                                .foregroundStyle(struckTextFaded ? Color.noorTextSecondary.opacity(0.4) : .white)
+                                .strikethrough(strikethroughProgress >= 1, color: Color.noorAccent)
+                            
+                            Text(statementSuffix.trimmingCharacters(in: .whitespaces))
+                                .font(typewriterFont)
+                                .foregroundStyle(.white)
                         }
-
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, NoorLayout.horizontalPadding)
 
                     Spacer()
 
-                    // Bottom controls — continue only, no dots on this screen
                     Button {
                         onContinue()
                     } label: {
                         HStack(spacing: 6) {
                             Text("Continue")
-                                .font(NoorFont.onboardingBodyLarge)
+                                .font(onboardingFont)
                             Image(systemName: "arrow.right")
                                 .font(.system(size: 14, weight: .medium))
                         }
@@ -1240,13 +1401,12 @@ private struct TypewriterIntroPageView: View {
     }
 
     private func startRevealAnimation() {
-        phase = 2
-        welcomeText = ""
-        builtOnText = ""
-        motivationText = ""
+        phase = 0
+        typedText = ""
+        illStartWhenText = ""
+        statementSuffix = ""
         strikethroughProgress = 0
-        motivationFaded = false
-        behavioralScienceText = ""
+        struckTextFaded = false
         buttonOpacity = 0
 
         withAnimation(.easeOut(duration: 0.6)) {
@@ -1256,13 +1416,13 @@ private struct TypewriterIntroPageView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
             hasStartedTypewriter = true
             startCursorBlink()
-            typeBuiltOn()
+            typeStatement()
         }
     }
 
     private func startCursorBlink() {
         cursorTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
-            if phase == 4 || phase >= 6 {
+            if phase == 1 || phase >= 4 {
                 showCursor = false
             } else {
                 showCursor.toggle()
@@ -1270,85 +1430,29 @@ private struct TypewriterIntroPageView: View {
         }
     }
 
-    // Phase 0: Type "Welcome to Noor"
-    private func typeWelcome() {
+    // Type "I'll start when" then "I'm ready." on two lines
+    private func typeStatement() {
         guard phase == 0 else { return }
-        for (index, _) in fullWelcome.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.12) {
+        let fullText = line1 + " " + line2  // "I'll start when I'm ready."
+        for (index, _) in fullText.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.14) {
                 guard self.phase == 0 else { return }
-                self.welcomeText = String(self.fullWelcome.prefix(index + 1))
+                self.typedText = String(fullText.prefix(index + 1))
+                UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.6)
 
-                if index == self.fullWelcome.count - 1 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                if index == fullText.count - 1 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        self.illStartWhenText = self.illStartWhen
+                        self.statementSuffix = self.line2
                         self.phase = 1
-                        self.deleteWelcome()
+                        self.strikethroughIllStartWhen()
                     }
                 }
             }
         }
     }
 
-    // Phase 1: Delete "Welcome to Noor"
-    private func deleteWelcome() {
-        guard phase == 1 else { return }
-        for index in 0..<fullWelcome.count {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.05) {
-                guard self.phase == 1 else { return }
-                let remaining = self.fullWelcome.count - index - 1
-                self.welcomeText = String(self.fullWelcome.prefix(remaining))
-
-                if remaining == 0 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        self.phase = 2
-                        self.typeBuiltOn()
-                    }
-                }
-            }
-        }
-    }
-
-    // Phase 2: Type "Built on "
-    private func typeBuiltOn() {
-        guard phase == 2 else { return }
-        for (index, _) in builtOnFull.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.12) {
-                guard self.phase == 2 else { return }
-                self.builtOnText = String(self.builtOnFull.prefix(index + 1))
-                UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.3)
-
-                if index == self.builtOnFull.count - 1 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                        self.phase = 3
-                        self.typeMotivation()
-                    }
-                }
-            }
-        }
-    }
-
-    // Phase 3: Type "motivation." character by character
-    private func typeMotivation() {
-        guard phase == 3 else { return }
-        for (index, _) in motivationFull.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.10) {
-                guard self.phase == 3 else { return }
-                self.motivationText = String(self.motivationFull.prefix(index + 1))
-                UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.4)
-
-                if index == self.motivationFull.count - 1 {
-                    // Pause, then strikethrough
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                        self.phase = 4
-                        self.strikethroughMotivation()
-                    }
-                }
-            }
-        }
-    }
-
-    // Phase 4: Strike through "motivation." — it stays visible, just crossed out and faded
-    private func strikethroughMotivation() {
-        // Dramatic strikethrough haptic
+    private func strikethroughIllStartWhen() {
         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -1358,48 +1462,85 @@ private struct TypewriterIntroPageView: View {
             strikethroughProgress = 1.0
         }
 
-        // Fade the text after strikethrough completes
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             withAnimation(.easeInOut(duration: 0.3)) {
-                motivationFaded = true
+                struckTextFaded = true
             }
         }
 
-        // Move to typing behavioral science
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
-            phase = 5
-            typeBehavioralScience()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            phase = 4
+            showFinalContent()
         }
     }
 
-    // Phase 5: Type "behavioral science." character by character on the next line
-    private func typeBehavioralScience() {
-        guard phase == 5 else { return }
-        for (index, _) in behavioralScienceFull.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.08) {
-                guard self.phase == 5 else { return }
-                self.behavioralScienceText = String(self.behavioralScienceFull.prefix(index + 1))
-                UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.5)
+    private func showFinalContent() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                buttonOpacity = 1
+            }
+        }
+    }
+}
 
-                if index == self.behavioralScienceFull.count - 1 {
-                    // Success haptic when fully typed
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    // Wait before showing continue
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                        self.phase = 6
-                        self.showFinalContent()
+// MARK: - Noor Mission Statement View — "Noor turns your big dreams into daily micro-actions."
+private struct NoorMissionStatementView: View {
+    let onContinue: () -> Void
+    
+    @State private var textOpacity: Double = 0
+    @State private var buttonOpacity: Double = 0
+    
+    private let statementFont = Font.system(size: 28, weight: .regular, design: .serif)
+    
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                VStack(spacing: 0) {
+                    Spacer()
+                    
+                    Text("Noor turns your big dreams into daily micro-actions.")
+                        .font(statementFont)
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(3)
+                        .lineSpacing(8)
+                        .opacity(textOpacity)
+                        .padding(.horizontal, 24)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    Spacer()
+                    
+                    // Show me — pink text with arrow
+                    Button {
+                        onContinue()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text("Show me")
+                                .font(NoorFont.button)
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        .foregroundStyle(Color.noorAccent)
                     }
+                    .opacity(buttonOpacity)
+                    .padding(.bottom, 60)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .background(Color.noorBackground)
+        .onAppear {
+            // Fade in text
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                withAnimation(.easeInOut(duration: 0.8)) {
+                    textOpacity = 1
                 }
             }
-        }
-    }
-
-    // Phase 6: Show continue button (no "Noor" on this page)
-    private func showFinalContent() {
-        // Button appears after a pause
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            withAnimation(.easeOut(duration: 0.6)) {
-                buttonOpacity = 1
+            // Fade in button after text
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    buttonOpacity = 1
+                }
             }
         }
     }
@@ -1413,11 +1554,12 @@ private struct IntroPageView: View {
     @State private var mockupAppeared = false
     
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .center, spacing: 20) {
-                Spacer().frame(height: 50)
-                
-                // Icon - only for pages that have one
+        GeometryReader { geo in
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .center, spacing: 20) {
+                    Spacer(minLength: 0)
+                    
+                    // Icon - only for pages that have one
                 Group {
                     if let icon = page.icon {
                         Image(systemName: icon)
@@ -1523,10 +1665,12 @@ private struct IntroPageView: View {
                         .animation(.easeOut(duration: 0.6).delay(0.6), value: restAppeared)
                 }
                 
-                Spacer().frame(height: 60)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: geo.size.height)
+                .padding(.horizontal, NoorLayout.horizontalPadding)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, NoorLayout.horizontalPadding)
         }
         .onAppear {
             // Headline appears first with gentle fade
@@ -1918,22 +2062,18 @@ private struct OnboardingTaskCompletionMockup: View {
     }
 }
 
-// MARK: - Onboarding Mockup: Vision Feature (Reduce Friction)
+// MARK: - Onboarding Mockup: Vision Feature (Reduce Friction) — Santorini, Greece focus
 private struct OnboardingVisionMockup: View {
     @State private var show1 = false
     @State private var show2 = false
     @State private var show3 = false
-    @State private var show4 = false
 
-    // Same color scheme as the main app (noor theme)
     private let destinationColor = Color.noorAccent
     private let pinterestColor = Color.noorOrange
-    private let instagramColor = Color.noorRoseGold
     private let actionColor = Color.noorSuccess
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Context header — ties to the boarding pass / journey
             HStack(spacing: 8) {
                 Image(systemName: "eye.fill")
                     .font(.system(size: 14))
@@ -1942,7 +2082,7 @@ private struct OnboardingVisionMockup: View {
                     .font(.system(size: 14, weight: .bold, design: .serif))
                     .foregroundStyle(.white)
                 Spacer()
-                Text("Solo Travel")
+                Text("Santorini, Greece")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Color.noorOrange)
                     .padding(.horizontal, 8)
@@ -1954,7 +2094,6 @@ private struct OnboardingVisionMockup: View {
             .padding(.top, 12)
             .padding(.bottom, 4)
 
-            // Vision items
             VStack(spacing: 6) {
                 visionRow(
                     icon: "globe.americas.fill",
@@ -1970,24 +2109,13 @@ private struct OnboardingVisionMockup: View {
                 visionRow(
                     icon: "photo.on.rectangle.angled",
                     color: pinterestColor,
-                    title: "Travel outfit inspo",
-                    subtitle: "pinterest.com/board",
+                    title: "Santorini inspo",
+                    subtitle: "Pinterest board",
                     actionIcon: "arrow.up.right",
                     actionLabel: "Open"
                 )
                 .opacity(show2 ? 1 : 0)
                 .offset(x: show2 ? 0 : -20)
-
-                visionRow(
-                    icon: "camera.fill",
-                    color: instagramColor,
-                    title: "@santorini.guide",
-                    subtitle: "instagram.com",
-                    actionIcon: "arrow.up.right",
-                    actionLabel: "Open"
-                )
-                .opacity(show3 ? 1 : 0)
-                .offset(x: show3 ? 0 : -20)
 
                 visionRow(
                     icon: "bolt.fill",
@@ -1997,8 +2125,8 @@ private struct OnboardingVisionMockup: View {
                     actionIcon: "checkmark",
                     actionLabel: "Done"
                 )
-                .opacity(show4 ? 1 : 0)
-                .offset(x: show4 ? 0 : -20)
+                .opacity(show3 ? 1 : 0)
+                .offset(x: show3 ? 0 : -20)
             }
             .padding(.horizontal, 10)
             .padding(.bottom, 12)
@@ -2022,13 +2150,9 @@ private struct OnboardingVisionMockup: View {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 withAnimation(.easeOut(duration: 0.35)) { show3 = true }
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.7) {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                withAnimation(.easeOut(duration: 0.35)) { show4 = true }
-            }
         }
         .onDisappear {
-            show1 = false; show2 = false; show3 = false; show4 = false
+            show1 = false; show2 = false; show3 = false
         }
     }
 
@@ -2220,8 +2344,7 @@ private struct OnboardingDestinationInputView: View {
                 }
                 
                 Text(OnboardingQuotes.destination)
-                    .font(NoorFont.title)
-                    .italic()
+                    .font(.system(size: 20, weight: .regular, design: .serif))
                     .foregroundStyle(Color.noorRoseGold)
                     .padding(.top, 4)
             }
@@ -2267,19 +2390,18 @@ private struct OnboardingTimelineInputView: View {
                     .foregroundStyle(.white)
                 
                 Text("A date makes it real.")
-                        .font(NoorFont.title)
-                        .foregroundStyle(Color.noorTextSecondary)
+                    .font(NoorFont.title)
+                    .foregroundStyle(Color.noorTextSecondary)
                 
                 Text(OnboardingQuotes.timeline)
-                    .font(NoorFont.title)
-                    .italic()
+                    .font(.system(size: 20, weight: .regular, design: .serif))
                     .foregroundStyle(Color.noorRoseGold)
                     .padding(.top, 4)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, 24)
             
-            TextField("e.g. June 2026", text: $timeline)
+            TextField("e.g. June 2026, End of summer, 6 months", text: $timeline)
                 .textFieldStyle(.plain)
                 .font(NoorFont.title)
                 .foregroundStyle(.white)
@@ -2291,8 +2413,12 @@ private struct OnboardingTimelineInputView: View {
             
             Spacer()
             
-            OnboardingTextButton(title: "Continue", action: onNext)
-                .padding(.bottom, 20)
+            OnboardingTextButton(
+                title: "Continue",
+                isDisabled: timeline.trimmingCharacters(in: .whitespaces).isEmpty,
+                action: onNext
+            )
+            .padding(.bottom, 20)
         }
         .padding(.horizontal, NoorLayout.horizontalPadding)
         .onAppear { isFocused = true }
@@ -2316,8 +2442,7 @@ private struct OnboardingStoryInputView: View {
                     .foregroundStyle(.white)
                 
                 Text(OnboardingQuotes.story)
-                    .font(NoorFont.title)
-                    .italic()
+                    .font(.system(size: 20, weight: .regular, design: .serif))
                     .foregroundStyle(Color.noorRoseGold)
             }
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -249,7 +249,7 @@ struct DailyFlameView: View {
                         .padding(.bottom, 8)
 
                     Text(phraseForStreak)
-                        .font(NoorFont.body)
+                        .font(.system(size: 20, weight: .regular, design: .serif))
                         .foregroundStyle(Color.noorTextSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 40)
@@ -257,7 +257,7 @@ struct DailyFlameView: View {
                         .padding(.bottom, 32)
 
                     Button(action: onDismiss) {
-                        Text("Tap to continue")
+                        Text("Tap to begin")
                             .font(NoorFont.button)
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -283,8 +283,18 @@ struct DailyFlameView: View {
 
                 Spacer(minLength: 0)
             }
+
+            ConfettiView(isActive: true, pieceCount: 220, duration: 5.0, style: .pink, fromAllSides: true)
+                .allowsHitTesting(false)
         }
         .onAppear {
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
             withAnimation(.easeOut(duration: 0.5)) {
                 flameOpacity = 1
                 flameScale = 1.0
@@ -305,7 +315,7 @@ struct DailyFlameView: View {
 
     private var phraseForStreak: String {
         if streakCount == 1 {
-            return "\(userName), you showed up. That's how it starts."
+            return "\(userName), You Showed Up."
         } else {
             return "\(streakCount) days in a row you've taken a step. You're building something real."
         }

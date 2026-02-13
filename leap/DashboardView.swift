@@ -63,6 +63,9 @@ struct DashboardView: View {
     @State private var showHabitSciencePopup = false
     @State private var habitScienceFact: HabitScienceFact?
     @State private var destinationSort: DestinationSort = .default
+    /// Staggered pop-in for Today's Itinerary rows (first time the section is seen)
+    @State private var visibleItineraryCount: Int = 0
+    @State private var hasAnimatedItineraryPopIn: Bool = false
     private let calendar = Calendar.current
 
     private var guestPassCount: Int {
@@ -116,12 +119,8 @@ struct DashboardView: View {
                         ScrollView {
                             VStack(alignment: .leading, spacing: 18) {
                                 todaysGamePlanSection
-                                if sortedGoals.isEmpty {
-                                    emptyState
-                                } else {
-                                    activeJourneysSection
-                                        .id("dreamsSection")
-                                }
+                                activeJourneysSection
+                                    .id("dreamsSection")
                             }
                             .padding(20)
                             .padding(.bottom, 100)
@@ -554,6 +553,7 @@ struct DashboardView: View {
                         id: id,
                         title: task.title,
                         subtitle: goal.destination.isEmpty ? goal.title : goal.destination,
+                        durationText: task.estimatedTime.isEmpty ? nil : task.estimatedTime,
                         icon: "arrow.right.circle.fill",
                         iconColor: Color.noorAccent,
                         kind: .mission,
@@ -573,6 +573,7 @@ struct DashboardView: View {
                 subtitle: habit.goalID != nil
                     ? goals.first(where: { $0.id.uuidString == habit.goalID })?.destination ?? "Habit"
                     : habit.customTag ?? "Daily habit",
+                durationText: habit.focusDurationMinutes > 0 ? "\(habit.focusDurationMinutes) min" : nil,
                 icon: "leaf.fill",
                 iconColor: Color.noorSuccess,
                 kind: .habit,
@@ -624,15 +625,36 @@ struct DashboardView: View {
                         .font(NoorFont.caption)
                         .foregroundStyle(Color.noorTextSecondary)
 
-                    // Task list
+                    // Task list — pop in one at a time on first view (same as reverse-scroll effect)
                     VStack(spacing: 0) {
                         let sorted = items.sorted { !$0.isCompleted && $1.isCompleted }
                         ForEach(Array(sorted.enumerated()), id: \.element.id) { index, item in
                             todayItemRow(item)
+                                .opacity(index < visibleItineraryCount ? 1 : 0)
+                                .offset(y: index < visibleItineraryCount ? 0 : 12)
+                                .animation(.easeOut(duration: 0.35), value: visibleItineraryCount)
 
                             if index < sorted.count - 1 {
                                 Divider()
                                     .background(Color.white.opacity(0.08))
+                            }
+                        }
+                    }
+                    .onAppear {
+                        if totalCount == 0 { return }
+                        if hasAnimatedItineraryPopIn {
+                            visibleItineraryCount = totalCount
+                        } else {
+                            visibleItineraryCount = 0
+                            for i in 1...totalCount {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.15) {
+                                    withAnimation(.easeOut(duration: 0.35)) {
+                                        visibleItineraryCount = i
+                                    }
+                                    if i == totalCount {
+                                        hasAnimatedItineraryPopIn = true
+                                    }
+                                }
                             }
                         }
                     }
@@ -647,8 +669,46 @@ struct DashboardView: View {
     private func todayItemRow(_ item: TodayItem) -> some View {
         let showFilled = item.isCompleted || confirmedCompletedIds.contains(item.id)
         
-        return HStack(spacing: 14) {
-            // Completion indicator — tappable to show confirmation; checkmark fills and stays once confirmed
+        return HStack(alignment: .center, spacing: 12) {
+            // Left: challenge title + duration — tappable to navigate
+            Button {
+                if let goal = item.goal {
+                    selectedGoal = goal
+                } else if item.kind == .habit {
+                    NotificationCenter.default.post(name: NSNotification.Name("switchToTab"), object: 3)
+                }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(item.title)
+                            .font(NoorFont.body)
+                            .foregroundStyle(showFilled ? Color.noorTextSecondary.opacity(0.5) : .white)
+                            .strikethrough(showFilled, color: Color.noorTextSecondary.opacity(0.4))
+                            .lineLimit(1)
+                            .multilineTextAlignment(.leading)
+
+                        HStack(alignment: .center, spacing: 4) {
+                            Text(item.kind == .mission ? "Challenge · \(item.subtitle)" : "Habit · \(item.subtitle)")
+                                .font(NoorFont.caption)
+                                .foregroundStyle(item.kind == .mission ? Color.noorAccent.opacity(0.7) : Color.noorSuccess.opacity(0.7))
+                                .lineLimit(1)
+                            if let duration = item.durationText, !duration.isEmpty {
+                                Text("·")
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
+                                Text(duration)
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary.opacity(0.8))
+                            }
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Right: checkbox
             Button {
                 if !showFilled {
                     itemToComplete = item
@@ -672,78 +732,47 @@ struct DashboardView: View {
                 }
             }
             .buttonStyle(.plain)
-
-            // Title + type — tappable to navigate
-            Button {
-                if let goal = item.goal {
-                    selectedGoal = goal
-                } else if item.kind == .habit {
-                    NotificationCenter.default.post(name: NSNotification.Name("switchToTab"), object: 3)
-                }
-            } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(item.title)
-                            .font(NoorFont.body)
-                            .foregroundStyle(showFilled ? Color.noorTextSecondary.opacity(0.5) : .white)
-                            .strikethrough(showFilled, color: Color.noorTextSecondary.opacity(0.4))
-                            .lineLimit(1)
-
-                        Text(item.kind == .mission ? "Challenge · \(item.subtitle)" : "Habit · \(item.subtitle)")
-                            .font(NoorFont.caption)
-                            .foregroundStyle(item.kind == .mission ? Color.noorAccent.opacity(0.7) : Color.noorSuccess.opacity(0.7))
-                            .lineLimit(1)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.noorTextSecondary.opacity(0.3))
-                }
-            }
-            .buttonStyle(.plain)
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
     }
 
 
-    // MARK: - Empty State
-    private var emptyState: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "airplane.departure")
-                .font(.system(size: 56))
-                .foregroundStyle(Color.noorRoseGold.opacity(0.7))
+    // MARK: - Empty State (cell shown under "Current Journeys" when no journeys)
+    private var emptyStateCell: some View {
+        Button {
+            showCreateGoal = true
+        } label: {
+            VStack(spacing: 16) {
+                Image(systemName: "airplane.departure")
+                    .font(.system(size: 44))
+                    .foregroundStyle(Color.noorRoseGold.opacity(0.85))
 
-            VStack(spacing: 8) {
-                Text("Book your first journey")
-                    .font(NoorFont.title)
-                    .foregroundStyle(.white)
+                VStack(spacing: 6) {
+                    Text("Book Your First Journey")
+                        .font(NoorFont.title)
+                        .foregroundStyle(.white)
 
-                Text("Your journey to the woman who lives that life starts with one small step.")
-                    .font(NoorFont.body)
-                    .foregroundStyle(Color.noorTextSecondary)
-                    .multilineTextAlignment(.center)
-            }
+                    Text("Every great adventure starts with a single step. Book yours and start living it.")
+                        .font(NoorFont.body)
+                        .foregroundStyle(Color.noorTextSecondary)
+                        .multilineTextAlignment(.center)
+                }
 
-            Button {
-                showCreateGoal = true
-            } label: {
-                Text("Book Your First Journey")
+                Text("+ My Journey")
                     .font(NoorFont.button)
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 56)
+                    .frame(height: 52)
                     .background(Color.noorAccent)
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
             }
-            .buttonStyle(.plain)
-            .padding(.top, 8)
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 24))
         }
-        .padding(24)
-        .background(Color.white.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .buttonStyle(.plain)
     }
 
     // Goals sorted based on selected filter — only active (non-completed) journeys
@@ -781,26 +810,31 @@ struct DashboardView: View {
 
                 Spacer()
 
-                Menu {
-                    ForEach(DestinationSort.allCases, id: \.self) { sort in
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                destinationSort = sort
+                if !sortedGoals.isEmpty {
+                    Menu {
+                        ForEach(DestinationSort.allCases, id: \.self) { sort in
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    destinationSort = sort
+                                }
+                            } label: {
+                                Label(sort.label, systemImage: sort.icon)
                             }
-                        } label: {
-                            Label(sort.label, systemImage: sort.icon)
                         }
+                    } label: {
+                        Image(systemName: "line.3.horizontal.decrease")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(destinationSort == .default ? Color.noorTextSecondary : Color.noorAccent)
+                            .frame(width: 36, height: 36)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Circle())
                     }
-                } label: {
-                    Image(systemName: "line.3.horizontal.decrease")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(destinationSort == .default ? Color.noorTextSecondary : Color.noorAccent)
-                        .frame(width: 36, height: 36)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(Circle())
                 }
             }
 
+            if sortedGoals.isEmpty {
+                emptyStateCell
+            } else {
             ForEach(sortedGoals, id: \.id) { goal in
                 SwipeActionCard(
                     onEdit: { goalToEdit = goal },
@@ -808,15 +842,16 @@ struct DashboardView: View {
                         goalToDelete = goal
                         showDeleteConfirmation = true
                     },
-                    onArchive: goal.isComplete ? {
+                    onArchive: {
                         archiveDream(goal)
-                    } : nil
+                    }
                 ) {
                     NavigationLink(destination: DailyCheckInView(goal: goal)) {
                         JourneyCard(goal: goal)
                     }
                     .buttonStyle(.plain)
                 }
+            }
             }
         }
     }
@@ -925,6 +960,7 @@ private struct TodayItem {
     let id: String
     let title: String
     let subtitle: String
+    let durationText: String?  // e.g. "5 min" for challenges/habits
     let icon: String
     let iconColor: Color
     let kind: Kind

@@ -47,6 +47,17 @@ struct DailyCheckInView: View {
         sortedTasks.first { $0.isUnlocked && !$0.isCompleted }
     }
 
+    /// Tasks to show in "Today's Challenge": completed today + current challenge, in order (so user sees accomplishment crossed off)
+    private var todayChallengeTasks: [DailyTask] {
+        let completedTodayIds = Set(sortedTasks.filter { task in
+            task.completedDates.contains { calendar.isDateInToday($0) }
+        }.map(\.id))
+        let currentId = currentChallenge?.id
+        return sortedTasks.filter { task in
+            completedTodayIds.contains(task.id) || task.id == currentId
+        }
+    }
+
     // Upcoming: locked tasks
     private var upcomingChallenges: [DailyTask] {
         sortedTasks.filter { !$0.isUnlocked }
@@ -311,20 +322,17 @@ struct DailyCheckInView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
-    // MARK: - Current Challenge Section
+    // MARK: - Current Challenge Section (keeps completed-today visible with strikethrough above Flight Status)
     @ViewBuilder
     private var currentChallengeSection: some View {
-        if let challenge = currentChallenge {
+        if !todayChallengeTasks.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                // Header with emphasis
                 HStack {
                     Text("Today's Challenge")
                         .font(NoorFont.title)
                         .foregroundStyle(.white)
-                    
                     Spacer()
-                    
-                    if let dueDate = challenge.dueDate {
+                    if let current = currentChallenge, let dueDate = current.dueDate {
                         Text("Due \(formatShortDate(dueDate))")
                             .font(NoorFont.callout)
                             .foregroundStyle(dueDateColor(dueDate))
@@ -335,56 +343,82 @@ struct DailyCheckInView: View {
                     }
                 }
 
-                // Challenge card — tap to see details
-                Button {
-                    showChallengeDetail = true
-                } label: {
-                    VStack(spacing: 12) {
-                        Text(challenge.title)
-                            .font(NoorFont.title2)
-                            .foregroundStyle(.white)
-                            .fontWeight(.semibold)
-                            .multilineTextAlignment(.center)
-
-                        HStack(spacing: 4) {
-                            Image(systemName: "clock")
-                                .font(.system(size: 12))
-                            Text(challenge.estimatedTime)
-                                .font(NoorFont.callout)
-                        }
-                        .foregroundStyle(Color.noorSuccess)
-
-                        // Checkbox
-                        Button {
-                            completeChallengeWithAnimation(challenge)
-                        } label: {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.white, lineWidth: 3)
-                                    .frame(width: 36, height: 36)
-
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color.white)
-                                    .frame(width: 28 * checkmarkFillProgress, height: 28 * checkmarkFillProgress)
-
-                                if checkmarkFillProgress >= 1 {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 18, weight: .bold))
-                                        .foregroundStyle(Color.noorBackground)
-                                        .transition(.scale.combined(with: .opacity))
-                                }
+                ForEach(todayChallengeTasks, id: \.id) { task in
+                    let isCompleted = task.completedDates.contains { calendar.isDateInToday($0) }
+                    if isCompleted {
+                        // Keep completed challenge visible with strikethrough so user sees their accomplishment
+                        HStack(spacing: 12) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 22))
+                                .foregroundStyle(Color.noorSuccess)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(task.title)
+                                    .font(NoorFont.title2)
+                                    .foregroundStyle(Color.noorTextSecondary.opacity(0.8))
+                                    .strikethrough()
+                                Text(task.estimatedTime)
+                                    .font(NoorFont.caption)
+                                    .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
                             }
+                            Spacer()
+                        }
+                        .padding(16)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                    } else {
+                        // Current challenge — tappable card with checkbox to the right of text
+                        Button {
+                            showChallengeDetail = true
+                        } label: {
+                            HStack(alignment: .center, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(task.title)
+                                        .font(NoorFont.title2)
+                                        .foregroundStyle(.white)
+                                        .fontWeight(.semibold)
+                                        .multilineTextAlignment(.leading)
+
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "clock")
+                                            .font(.system(size: 12))
+                                        Text(task.estimatedTime)
+                                            .font(NoorFont.callout)
+                                    }
+                                    .foregroundStyle(Color.noorSuccess)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                                Button {
+                                    completeChallengeWithAnimation(task)
+                                } label: {
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.white, lineWidth: 3)
+                                            .frame(width: 36, height: 36)
+
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(Color.white)
+                                            .frame(width: 28 * checkmarkFillProgress, height: 28 * checkmarkFillProgress)
+
+                                        if checkmarkFillProgress >= 1 {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 18, weight: .bold))
+                                                .foregroundStyle(Color.noorBackground)
+                                                .transition(.scale.combined(with: .opacity))
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(16)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
                         }
                         .buttonStyle(.plain)
+                        .sheet(isPresented: $showChallengeDetail) {
+                            challengeDetailSheet(task)
+                        }
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(16)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                }
-                .buttonStyle(.plain)
-                .sheet(isPresented: $showChallengeDetail) {
-                    challengeDetailSheet(challenge)
                 }
             }
         } else if progress >= 100 {
@@ -1201,11 +1235,11 @@ struct AddVisionToJourneySheet: View {
                                         .padding(.vertical, 16)
                                         .background(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .fill(selectedKind == kind ? Color.noorOrange.opacity(0.3) : Color.white.opacity(0.06))
+                                                .fill(selectedKind == kind ? Color.noorAccent.opacity(0.3) : Color.white.opacity(0.06))
                                         )
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .stroke(selectedKind == kind ? Color.noorOrange : Color.clear, lineWidth: 2)
+                                                .stroke(selectedKind == kind ? Color.noorAccent : Color.clear, lineWidth: 2)
                                         )
                                     }
                                     .buttonStyle(.plain)
@@ -1227,7 +1261,7 @@ struct AddVisionToJourneySheet: View {
                                         .padding(14)
                                         .background(Color.white.opacity(0.08))
                                         .clipShape(RoundedRectangle(cornerRadius: 12))
-                                        .tint(Color.noorOrange)
+                                        .tint(Color.noorAccent)
                                 }
 
                                 VStack(alignment: .leading, spacing: 8) {
@@ -1243,7 +1277,7 @@ struct AddVisionToJourneySheet: View {
                                         .padding(14)
                                         .background(Color.white.opacity(0.08))
                                         .clipShape(RoundedRectangle(cornerRadius: 12))
-                                        .tint(Color.noorOrange)
+                                        .tint(Color.noorAccent)
                                 }
 
                             case .destination:
@@ -1257,7 +1291,7 @@ struct AddVisionToJourneySheet: View {
                                         .padding(14)
                                         .background(Color.white.opacity(0.08))
                                         .clipShape(RoundedRectangle(cornerRadius: 12))
-                                        .tint(Color.noorOrange)
+                                        .tint(Color.noorAccent)
                                 }
 
                             case .action:
@@ -1271,7 +1305,7 @@ struct AddVisionToJourneySheet: View {
                                         .padding(14)
                                         .background(Color.white.opacity(0.08))
                                         .clipShape(RoundedRectangle(cornerRadius: 12))
-                                        .tint(Color.noorOrange)
+                                        .tint(Color.noorAccent)
                                 }
 
                                 VStack(alignment: .leading, spacing: 8) {
@@ -1287,7 +1321,7 @@ struct AddVisionToJourneySheet: View {
                                         .padding(14)
                                         .background(Color.white.opacity(0.08))
                                         .clipShape(RoundedRectangle(cornerRadius: 12))
-                                        .tint(Color.noorOrange)
+                                        .tint(Color.noorAccent)
                                 }
                             }
                         }
@@ -1320,7 +1354,7 @@ struct AddVisionToJourneySheet: View {
                         } else {
                             Text("Save")
                                 .font(NoorFont.button)
-                                .foregroundStyle(canSave ? Color.noorOrange : Color.noorTextSecondary)
+                                .foregroundStyle(canSave ? Color.noorAccent : Color.noorTextSecondary)
                         }
                     }
                     .disabled(!canSave || isSaving)

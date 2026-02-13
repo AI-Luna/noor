@@ -14,6 +14,16 @@ struct PassportView: View {
     @State private var selectedPin: TravelPin?
     @State private var showAddVacation = false
 
+    private var userName: String {
+        UserDefaults.standard.string(forKey: "userName") ?? "Traveler"
+    }
+
+    private var passportTitle: String {
+        let name = userName.trimmingCharacters(in: .whitespaces)
+        if name.isEmpty { return "Passport" }
+        return "\(name)'s Passport"
+    }
+
     // MARK: - Computed Metrics
     private var placesVisited: Int { pins.count }
 
@@ -40,6 +50,10 @@ struct PassportView: View {
                         metricsSection
                             .padding(.top, 16)
 
+                        // Boarding passes for pinned locations
+                        boardingPassesSection
+                            .padding(.top, 24)
+
                         Spacer().frame(height: 120)
                     }
                     .padding(.top, 4)
@@ -49,14 +63,9 @@ struct PassportView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "globe.americas.fill")
-                            .font(.system(size: 18))
-                            .foregroundStyle(.white)
-                        Text("Noor Passport")
-                            .font(NoorFont.title2)
-                            .foregroundStyle(.white)
-                    }
+                    Text(passportTitle)
+                        .font(NoorFont.title2)
+                        .foregroundStyle(.white)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -102,7 +111,7 @@ struct PassportView: View {
         .padding(.top, 8)
     }
 
-    // MARK: - Passport Header
+    // MARK: - Passport Header (below map — original Noor passport branding)
     private var passportHeader: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 6) {
@@ -186,6 +195,51 @@ struct PassportView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
+    // MARK: - Boarding Passes Section (pinned locations)
+    private var boardingPassesSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Your Boarding Passes")
+                    .font(NoorFont.title2)
+                    .foregroundStyle(.white)
+                Spacer()
+                Text("\(pins.count)")
+                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color.noorAccent)
+            }
+            .padding(.horizontal, NoorLayout.horizontalPadding)
+
+            if pins.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "mappin.circle")
+                        .font(.system(size: 36))
+                        .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
+                    Text("No pinned locations yet")
+                        .font(NoorFont.body)
+                        .foregroundStyle(Color.noorTextSecondary)
+                    Text("Tap + to pin a place you've been")
+                        .font(NoorFont.caption)
+                        .foregroundStyle(Color.noorTextSecondary.opacity(0.8))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 32)
+            } else {
+                LazyVStack(spacing: 12) {
+                    ForEach(pins) { pin in
+                        Button {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            selectedPin = pin
+                        } label: {
+                            TravelPinBoardingPassCard(pin: pin)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, NoorLayout.horizontalPadding)
+            }
+        }
+    }
+
     // MARK: - Data
     private func loadData() {
         Task { @MainActor in
@@ -223,15 +277,159 @@ struct PassportView: View {
     }
 }
 
+// MARK: - Boarding pass card for a pinned location (exact place user went and pinned)
+private struct TravelPinBoardingPassCard: View {
+    let pin: TravelPin
+
+    private var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: pin.dateVisited)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header bar
+            HStack {
+                Image(systemName: "airplane")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(white: 0.3))
+                Text("BOARDING PASS")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(white: 0.3))
+                    .tracking(1.5)
+                Spacer()
+                Text(pin.country.uppercased())
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color(white: 0.45))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color(white: 0.92))
+
+            // Body — exact location pinned on the map
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("DESTINATION")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.black.opacity(0.6))
+                        Text(pin.destination)
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.black)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("COUNTRY")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.black.opacity(0.6))
+                        Text(pin.country)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.black)
+                            .lineLimit(1)
+                    }
+                }
+
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color.noorAccent.opacity(0.6))
+                        .frame(width: 5, height: 5)
+                    Rectangle()
+                        .fill(Color(white: 0.8))
+                        .frame(height: 1)
+                        .frame(maxWidth: .infinity)
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.noorAccent)
+                    Rectangle()
+                        .fill(Color(white: 0.8))
+                        .frame(height: 1)
+                        .frame(maxWidth: .infinity)
+                    Circle()
+                        .fill(Color.noorAccent.opacity(0.6))
+                        .frame(width: 5, height: 5)
+                }
+
+                HStack(spacing: 4) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color(white: 0.5))
+                    Text("Visited \(formattedDate)")
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color(white: 0.5))
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+        }
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+    }
+}
+
+// MARK: - Tap-to-select map (user picks pin location manually)
+private struct TapToSelectMapView: View {
+    @Binding var selectedPosition: (x: CGFloat, y: CGFloat)?
+    var mapHeight: CGFloat = 140
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Tap the map where you went")
+                .font(NoorFont.caption)
+                .foregroundStyle(Color.noorTextSecondary)
+
+            GeometryReader { geo in
+                ZStack(alignment: .topLeading) {
+                    Image("PassportWorldMapPurple")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    if let pos = selectedPosition {
+                        Circle()
+                            .fill(Color.noorAccent.opacity(0.5))
+                            .frame(width: 24, height: 24)
+                        Circle()
+                            .fill(Color.noorAccent)
+                            .frame(width: 12, height: 12)
+                            .position(
+                                x: geo.size.width * pos.x,
+                                y: geo.size.height * pos.y
+                            )
+                    }
+
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .gesture(
+                            DragGesture(minimumDistance: 0)
+                                .onEnded { value in
+                                    let x = max(0, min(1, value.location.x / geo.size.width))
+                                    let y = max(0, min(1, value.location.y / geo.size.height))
+                                    selectedPosition = (x, y)
+                                }
+                        )
+                }
+            }
+            .frame(height: mapHeight)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+}
+
 // MARK: - Add Vacation Sheet
 private struct AddVacationSheet: View {
     let onSave: (TravelPin) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedMapPosition: (x: CGFloat, y: CGFloat)?
     @State private var destination = ""
     @State private var country = ""
     @State private var dateVisited = Date()
 
     private var canSave: Bool {
+        selectedMapPosition != nil &&
         !destination.trimmingCharacters(in: .whitespaces).isEmpty &&
         !country.trimmingCharacters(in: .whitespaces).isEmpty
     }
@@ -241,78 +439,98 @@ private struct AddVacationSheet: View {
             ZStack {
                 Color.noorBackground.ignoresSafeArea()
 
-                VStack(spacing: 24) {
-                    VStack(alignment: .leading, spacing: 16) {
-                        inputField(label: "DESTINATION", placeholder: "Paris", text: $destination)
-                        inputField(label: "COUNTRY", placeholder: "France", text: $country)
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("DATE VISITED")
-                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(Color.noorTextSecondary)
-                            DatePicker("", selection: $dateVisited, displayedComponents: .date)
-                                .datePickerStyle(.compact)
-                                .labelsHidden()
-                                .tint(Color.noorAccent)
-                                .colorScheme(.dark)
-                        }
-                    }
-                    .padding(20)
-                    .background(Color.white.opacity(0.04))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-
-                    Button {
-                        let pin = TravelPin(
-                            destination: destination.trimmingCharacters(in: .whitespaces),
-                            country: country.trimmingCharacters(in: .whitespaces),
-                            dateVisited: dateVisited
-                        )
-                        onSave(pin)
-                        dismiss()
-                    } label: {
-                        Text("Pin It")
-                            .font(NoorFont.body)
+                VStack(spacing: 0) {
+                    // Header — same style as Science of Microhabits (largeTitle, not stuck to left)
+                    Spacer().frame(height: 24)
+                    HStack(alignment: .center) {
+                        Text("Add pinned location")
+                            .font(NoorFont.largeTitle)
                             .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(canSave ? Color.noorAccent : Color.white.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        Spacer()
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(Color.noorTextSecondary)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .disabled(!canSave)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .padding(.bottom, 16)
 
-                    Spacer()
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 28) {
+                        TapToSelectMapView(selectedPosition: $selectedMapPosition)
+                            .padding(.horizontal, NoorLayout.horizontalPadding)
+
+                        VStack(alignment: .leading, spacing: 20) {
+                            inputField(label: "DESTINATION", placeholder: "Paris", text: $destination)
+                            inputField(label: "COUNTRY", placeholder: "France", text: $country)
+
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("DATE VISITED")
+                                    .font(NoorFont.bodyLarge)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                                DatePicker("", selection: $dateVisited, displayedComponents: .date)
+                                    .datePickerStyle(.compact)
+                                    .labelsHidden()
+                                    .tint(Color.noorAccent)
+                                    .colorScheme(.dark)
+                            }
+                        }
+                        .padding(24)
+                        .background(Color.white.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+
+                        Button {
+                            guard let pos = selectedMapPosition else { return }
+                            let pin = TravelPin(
+                                destination: destination.trimmingCharacters(in: .whitespaces),
+                                country: country.trimmingCharacters(in: .whitespaces),
+                                dateVisited: dateVisited,
+                                mapPositionX: Double(pos.x),
+                                mapPositionY: Double(pos.y)
+                            )
+                            onSave(pin)
+                            dismiss()
+                        } label: {
+                            Text("Pin it")
+                                .font(NoorFont.title2)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 18)
+                                .background(canSave ? Color.noorAccent : Color.white.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                        .disabled(!canSave)
+
+                        Spacer().frame(height: 32)
+                    }
+                    .padding(.horizontal, NoorLayout.horizontalPadding)
+                    .padding(.top, 8)
                 }
-                .padding(.horizontal, NoorLayout.horizontalPadding)
-                .padding(.top, 20)
+                .scrollDismissesKeyboard(.interactively)
+                }
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Add Vacation")
-                        .font(NoorFont.title2)
-                        .foregroundStyle(.white)
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
-                        .foregroundStyle(Color.noorTextSecondary)
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
     }
 
     private func inputField(label: String, placeholder: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(label)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(NoorFont.bodyLarge)
                 .foregroundStyle(Color.noorTextSecondary)
             TextField(placeholder, text: text)
-                .font(NoorFont.body)
+                .font(NoorFont.title2)
                 .foregroundStyle(.white)
-                .padding(12)
+                .padding(16)
                 .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
         }
     }
 }
@@ -488,6 +706,9 @@ private struct PassportWorldMap: View {
     ]
 
     private func positionForPin(_ pin: TravelPin, at index: Int) -> (CGFloat, CGFloat) {
+        if let x = pin.mapPositionX, let y = pin.mapPositionY {
+            return (CGFloat(x), CGFloat(y))
+        }
         var hasher = Hasher()
         hasher.combine(pin.id)
         let hash = abs(hasher.finalize())
@@ -503,7 +724,7 @@ private struct PassportWorldMap: View {
                     .scaledToFit()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                // Vacation pins — tappable, all accent color
+                // Vacation pins — tappable, at user-selected or fallback position
                 ForEach(Array(pins.enumerated()), id: \.element.id) { index, pin in
                     let pos = positionForPin(pin, at: index)
                     Button {
