@@ -136,6 +136,7 @@ struct NoorPaywallView: View {
     private func handlePurchaseOrRestore(customerInfo: CustomerInfo, source: String) {
         NSLog("[PaywallView] \(source) completed")
         NSLog("[PaywallView] Active entitlements: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")
+        NSLog("[PaywallView] All entitlements: \(customerInfo.entitlements.all.keys.joined(separator: ", "))")
         
         let proActive = customerInfo.entitlements["pro"]?.isActive == true
         
@@ -143,15 +144,35 @@ struct NoorPaywallView: View {
             // Refresh global state
             Task { await PurchaseManager.shared.checkProStatus() }
             showSuccess = true
-        } else {
-            NSLog("[PaywallView] \(source) completed but pro not active - checking again...")
-            // Sometimes the callback info is stale, refetch
-            Task {
-                await PurchaseManager.shared.checkProStatus()
-                if PurchaseManager.shared._isPro {
+            return
+        }
+        
+        // For PURCHASE: Apple confirmed it - proceed even if entitlement check fails (sync delay)
+        // For RESTORE: only proceed if entitlement is actually active
+        if source == "Purchase" {
+            NSLog("[PaywallView] Purchase confirmed by Apple - proceeding regardless of entitlement sync")
+            Task { await PurchaseManager.shared.checkProStatus() }
+            showSuccess = true
+            return
+        }
+        
+        // Restore path: verify entitlement is actually active
+        NSLog("[PaywallView] Restore completed but pro not active - checking again...")
+        Task {
+            await PurchaseManager.shared.checkProStatus()
+            if PurchaseManager.shared._isPro {
+                await MainActor.run {
+                    showSuccess = true
+                }
+            } else {
+                // Try restore again to force sync
+                let restored = await PurchaseManager.shared.restoreAndCheck()
+                if restored {
                     await MainActor.run {
                         showSuccess = true
                     }
+                } else {
+                    NSLog("[PaywallView] No active subscription found after restore")
                 }
             }
         }

@@ -1163,6 +1163,7 @@ struct OnboardingView: View {
     private func handlePaywallCompletion(customerInfo: CustomerInfo, source: String) {
         NSLog("[OnboardingPaywall] \(source) completed")
         NSLog("[OnboardingPaywall] Active entitlements: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")
+        NSLog("[OnboardingPaywall] All entitlements: \(customerInfo.entitlements.all.keys.joined(separator: ", "))")
         
         let proActive = customerInfo.entitlements["pro"]?.isActive == true
         
@@ -1170,24 +1171,36 @@ struct OnboardingView: View {
             // Refresh global state and complete
             Task { await PurchaseManager.shared.checkProStatus() }
             saveUserAndComplete()
-        } else {
-            NSLog("[OnboardingPaywall] \(source) completed but pro not active - verifying...")
-            // Callback info might be stale, refetch and check
-            Task {
-                await PurchaseManager.shared.checkProStatus()
-                if PurchaseManager.shared._isPro {
+            return
+        }
+        
+        // For PURCHASE: Apple confirmed it - proceed even if entitlement check fails (sync delay)
+        // For RESTORE: only proceed if entitlement is actually active
+        if source == "Purchase" {
+            NSLog("[OnboardingPaywall] Purchase confirmed by Apple - proceeding regardless of entitlement sync")
+            Task { await PurchaseManager.shared.checkProStatus() }
+            saveUserAndComplete()
+            return
+        }
+        
+        // Restore path: verify entitlement is actually active
+        NSLog("[OnboardingPaywall] Restore completed but pro not active - verifying...")
+        Task {
+            await PurchaseManager.shared.checkProStatus()
+            if PurchaseManager.shared._isPro {
+                await MainActor.run {
+                    saveUserAndComplete()
+                }
+            } else {
+                // Try restore again to force sync
+                NSLog("[OnboardingPaywall] Attempting restore sync...")
+                let restored = await PurchaseManager.shared.restoreAndCheck()
+                if restored {
                     await MainActor.run {
                         saveUserAndComplete()
                     }
                 } else {
-                    // Still not pro - try restore as last resort
-                    NSLog("[OnboardingPaywall] Attempting restore as fallback...")
-                    let restored = await PurchaseManager.shared.restoreAndCheck()
-                    if restored {
-                        await MainActor.run {
-                            saveUserAndComplete()
-                        }
-                    }
+                    NSLog("[OnboardingPaywall] No active subscription found after restore")
                 }
             }
         }
