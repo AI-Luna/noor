@@ -10,6 +10,28 @@ import SwiftUI
 import SwiftData
 import UIKit
 
+enum DestinationSort: String, CaseIterable {
+    case `default` = "Default"
+    case leastProgress = "Least Progress"
+    case mostProgress = "Most Progress"
+    case mostTasksLeft = "Most Tasks Left"
+    case newest = "Newest First"
+    case dueDate = "Due Soonest"
+
+    var label: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .default: return "arrow.up.arrow.down"
+        case .leastProgress: return "chart.bar.fill"
+        case .mostProgress: return "chart.bar.xaxis"
+        case .mostTasksLeft: return "list.number"
+        case .newest: return "clock.fill"
+        case .dueDate: return "calendar"
+        }
+    }
+}
+
 struct DashboardView: View {
     @Environment(DataManager.self) private var dataManager
     @Environment(PurchaseManager.self) private var purchaseManager
@@ -22,7 +44,7 @@ struct DashboardView: View {
     @State private var showGoldenTicketSheet = false
     @State private var showDailyFlame = false
     @State private var globalStreak: Int = 0
-    @State private var visionItems: [VisionItem] = []
+
     @State private var microhabits: [Microhabit] = []
     @State private var selectedGoal: Goal?
     @State private var scrollProxy: ScrollViewProxy?
@@ -32,6 +54,15 @@ struct DashboardView: View {
     @State private var explanationPopup: String?
     @State private var itemToComplete: TodayItem?
     @State private var showCompleteConfirmation = false
+    /// IDs of items user just confirmed complete — keeps checkmark visible before refresh and gives positive reinforcement
+    @State private var confirmedCompletedIds: Set<String> = []
+    /// Confetti celebration states
+    @State private var showGreenConfetti = false
+    @State private var showPinkConfetti = false
+    /// Science of habits popup (shown when ALL habits complete for the day)
+    @State private var showHabitSciencePopup = false
+    @State private var habitScienceFact: HabitScienceFact?
+    @State private var destinationSort: DestinationSort = .default
     private let calendar = Calendar.current
 
     private var guestPassCount: Int {
@@ -85,8 +116,7 @@ struct DashboardView: View {
                         ScrollView {
                             VStack(alignment: .leading, spacing: 18) {
                                 todaysGamePlanSection
-                                fromYourVisionSection
-                                if goals.isEmpty {
+                                if sortedGoals.isEmpty {
                                     emptyState
                                 } else {
                                     activeJourneysSection
@@ -176,6 +206,71 @@ struct DashboardView: View {
                     .padding(.horizontal, 40)
                     .transition(.scale.combined(with: .opacity))
                 }
+                
+                // Green confetti for habit completion — big, bold burst
+                if showGreenConfetti {
+                    ConfettiView(isActive: true, pieceCount: 160, duration: 4.0, style: .green)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                }
+                
+                // Pink confetti for journey mission completion — big, bold burst
+                if showPinkConfetti {
+                    ConfettiView(isActive: true, pieceCount: 160, duration: 4.0, style: .pink)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                }
+                
+                // Science of habits popup (when ALL habits complete)
+                if showHabitSciencePopup, let fact = habitScienceFact {
+                    Color.black.opacity(0.5)
+                        .ignoresSafeArea()
+                        .onTapGesture { withAnimation { showHabitSciencePopup = false } }
+                    
+                    VStack(spacing: 16) {
+                        Image(systemName: "brain.head.profile")
+                            .font(.system(size: 40))
+                            .foregroundStyle(Color.noorSuccess)
+                        
+                        Text("All Habits Complete!")
+                            .font(NoorFont.title)
+                            .foregroundStyle(.white)
+                        
+                        Text(fact.title)
+                            .font(NoorFont.title2)
+                            .foregroundStyle(Color.noorSuccess)
+                            .multilineTextAlignment(.center)
+                        
+                        Text(fact.description)
+                            .font(NoorFont.body)
+                            .foregroundStyle(Color.noorTextSecondary)
+                            .multilineTextAlignment(.center)
+                        
+                        Button {
+                            withAnimation { showHabitSciencePopup = false }
+                        } label: {
+                            Text("Amazing!")
+                                .font(NoorFont.button)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 32)
+                                .padding(.vertical, 14)
+                                .background(Color.noorSuccess)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 8)
+                    }
+                    .padding(28)
+                    .background(Color.noorDeepPurple)
+                    .clipShape(RoundedRectangle(cornerRadius: 24))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 24)
+                            .stroke(Color.noorSuccess.opacity(0.3), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.5), radius: 24)
+                    .padding(.horizontal, 32)
+                    .transition(.scale.combined(with: .opacity))
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
@@ -235,7 +330,7 @@ struct DashboardView: View {
                                 )
                                 .frame(width: 28, height: 28)
                             Text(String(userName.prefix(1)).uppercased())
-                                .font(.system(size: 12, weight: .bold, design: .serif))
+                                .font(NoorFont.caption)
                                 .foregroundStyle(.white)
                         }
                     }
@@ -273,14 +368,12 @@ struct DashboardView: View {
                 DataManager.shared.initialize()
                 loadGoals()
                 loadGlobalStreak()
-                loadVisionItems()
                 loadMicrohabits()
                 tryShowDailyFlame()
             }
             .refreshable {
                 loadGoals()
                 loadGlobalStreak()
-                loadVisionItems()
                 loadMicrohabits()
             }
             .fullScreenCover(isPresented: $showDailyFlame) {
@@ -362,29 +455,76 @@ struct DashboardView: View {
     }
 
     private func markItemComplete(_ item: TodayItem) {
+        // Show filled checkmark immediately for positive reinforcement (persists; never disappears)
+        confirmedCompletedIds.insert(item.id)
+        itemToComplete = nil
+        
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+        
+        // Show confetti based on item type + extra haptic excitement
+        if item.kind == .habit {
+            showGreenConfetti = true
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
+                showGreenConfetti = false
+            }
+        } else if item.kind == .mission {
+            showPinkConfetti = true
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
+                showPinkConfetti = false
+            }
+        }
+        
         Task { @MainActor in
             do {
                 if item.kind == .habit {
-                    // Mark habit as complete for today
                     if let habitID = UUID(uuidString: item.id) {
                         try await dataManager.addMicrohabitCompletion(habitID, date: Date())
                     }
                 } else if item.kind == .mission, let goal = item.goal {
-                    // Mark mission/challenge as complete
-                    if let task = goal.currentChallenge {
-                        try await dataManager.addDailyTaskCompletion(goalID: goal.id.uuidString, taskID: task.id.uuidString, date: Date())
-                    }
+                    try await dataManager.addDailyTaskCompletion(goalID: goal.id.uuidString, taskID: item.id, date: Date())
                 }
-                // Haptic feedback
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.success)
-                
-                // Refresh data
                 loadGoals()
                 loadMicrohabits()
-                itemToComplete = nil
+                
+                // Check if ALL habits for the day are now complete
+                if item.kind == .habit {
+                    checkAllHabitsComplete()
+                }
             } catch {
                 print("Failed to mark item complete: \(error)")
+                confirmedCompletedIds.remove(item.id)
+            }
+        }
+    }
+    
+    /// Check if all habits are complete for today and show science popup
+    private func checkAllHabitsComplete() {
+        guard !microhabits.isEmpty else { return }
+        
+        let allHabitsCompleteToday = microhabits.allSatisfy { habit in
+            habit.completedDates.contains { calendar.isDateInToday($0) } || confirmedCompletedIds.contains(habit.id.uuidString)
+        }
+        
+        if allHabitsCompleteToday {
+            // Pick a random science fact and show popup
+            habitScienceFact = HabitScienceFact.allFacts.randomElement()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                showHabitSciencePopup = true
             }
         }
     }
@@ -395,23 +535,32 @@ struct DashboardView: View {
         return formatter.string(from: Date())
     }
 
-    // MARK: - Today's Game Plan
+    // MARK: - Today's Itinerary
     private var todaysMissions: [TodayItem] {
         var items: [TodayItem] = []
+        var addedMissionIds: Set<String> = []
 
-        // Collect current challenge from each active journey
+        // For each active journey: show current challenge and any challenge completed today (so checkmark persists)
         for goal in goals where !goal.isComplete {
-            if let task = goal.currentChallenge {
-                items.append(TodayItem(
-                    id: task.id.uuidString,
-                    title: task.title,
-                    subtitle: goal.destination.isEmpty ? goal.title : goal.destination,
-                    icon: "arrow.right.circle.fill",
-                    iconColor: Color.noorAccent,
-                    kind: .mission,
-                    isCompleted: false,
-                    goal: goal
-                ))
+            let sortedTasks = goal.dailyTasks.sorted { $0.order < $1.order }
+            for task in sortedTasks {
+                let completedToday = task.completedDates.contains { calendar.isDateInToday($0) }
+                let isCurrent = goal.currentChallenge?.id == task.id
+                if isCurrent || completedToday {
+                    let id = task.id.uuidString
+                    guard !addedMissionIds.contains(id) else { continue }
+                    addedMissionIds.insert(id)
+                    items.append(TodayItem(
+                        id: id,
+                        title: task.title,
+                        subtitle: goal.destination.isEmpty ? goal.title : goal.destination,
+                        icon: "arrow.right.circle.fill",
+                        iconColor: Color.noorAccent,
+                        kind: .mission,
+                        isCompleted: completedToday,
+                        goal: goal
+                    ))
+                }
             }
         }
 
@@ -457,14 +606,14 @@ struct DashboardView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     // Header row
                     HStack {
-                        Text("Today's Game Plan")
+                        Text("Today's Itinerary")
                             .font(NoorFont.title2)
                             .foregroundStyle(.white)
                         
                         Spacer()
                         
                         Text(completedCount == totalCount ? "Done!" : "\(completedCount)/\(totalCount)")
-                            .font(.system(size: 14, weight: .bold, design: .serif))
+                            .font(NoorFont.body)
                             .foregroundStyle(completedCount == totalCount ? Color.noorSuccess : Color.noorAccent)
                     }
                     
@@ -496,20 +645,22 @@ struct DashboardView: View {
     }
 
     private func todayItemRow(_ item: TodayItem) -> some View {
-        HStack(spacing: 14) {
-            // Completion indicator — tappable to show confirmation
+        let showFilled = item.isCompleted || confirmedCompletedIds.contains(item.id)
+        
+        return HStack(spacing: 14) {
+            // Completion indicator — tappable to show confirmation; checkmark fills and stays once confirmed
             Button {
-                if !item.isCompleted {
+                if !showFilled {
                     itemToComplete = item
                     showCompleteConfirmation = true
                 }
             } label: {
                 ZStack {
                     Circle()
-                        .stroke(item.isCompleted ? Color.noorSuccess : Color.white.opacity(0.2), lineWidth: 2)
+                        .stroke(showFilled ? Color.noorSuccess : Color.white.opacity(0.2), lineWidth: 2)
                         .frame(width: 28, height: 28)
 
-                    if item.isCompleted {
+                    if showFilled {
                         Circle()
                             .fill(Color.noorSuccess)
                             .frame(width: 28, height: 28)
@@ -534,11 +685,11 @@ struct DashboardView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(item.title)
                             .font(NoorFont.body)
-                            .foregroundStyle(item.isCompleted ? Color.noorTextSecondary.opacity(0.5) : .white)
-                            .strikethrough(item.isCompleted, color: Color.noorTextSecondary.opacity(0.4))
+                            .foregroundStyle(showFilled ? Color.noorTextSecondary.opacity(0.5) : .white)
+                            .strikethrough(showFilled, color: Color.noorTextSecondary.opacity(0.4))
                             .lineLimit(1)
 
-                        Text(item.kind == .mission ? "Mission · \(item.subtitle)" : "Habit · \(item.subtitle)")
+                        Text(item.kind == .mission ? "Challenge · \(item.subtitle)" : "Habit · \(item.subtitle)")
                             .font(NoorFont.caption)
                             .foregroundStyle(item.kind == .mission ? Color.noorAccent.opacity(0.7) : Color.noorSuccess.opacity(0.7))
                             .lineLimit(1)
@@ -557,34 +708,6 @@ struct DashboardView: View {
         .padding(.horizontal, 16)
     }
 
-    // MARK: - From your vision (today's one thing to act on)
-    private var fromYourVisionSection: some View {
-        FromYourVisionBlock(items: visionItems, onOpen: openVisionItem)
-    }
-    
-    private func loadVisionItems() {
-        guard let data = UserDefaults.standard.data(forKey: StorageKey.visionItems),
-              let decoded = try? JSONDecoder().decode([VisionItem].self, from: data) else {
-            visionItems = []
-            return
-        }
-        visionItems = decoded
-    }
-
-    private func openVisionItem(_ item: VisionItem) {
-        switch item.kind {
-        case .pinterest, .instagram, .action:
-            if let urlString = item.url, let url = URL(string: urlString) {
-                UIApplication.shared.open(url)
-            }
-        case .destination:
-            let name = item.placeName ?? item.title
-            let query = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
-            if let url = URL(string: "https://www.google.com/search?q=flights+to+\(query)") {
-                UIApplication.shared.open(url)
-            }
-        }
-    }
 
     // MARK: - Empty State
     private var emptyState: some View {
@@ -623,22 +746,60 @@ struct DashboardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 24))
     }
 
-    // Goals sorted: incomplete (least progress first), then completed at bottom
+    // Goals sorted based on selected filter — only active (non-completed) journeys
+    // Completed journeys live on the Progress tab under "Completed Journeys"
     private var sortedGoals: [Goal] {
-        goals.sorted { a, b in
-            let aComplete = a.isComplete
-            let bComplete = b.isComplete
-            if aComplete != bComplete { return !aComplete }
-            return a.progress < b.progress
+        goals.filter { !$0.isComplete }.sorted { a, b in
+            switch destinationSort {
+            case .default:
+                return a.progress < b.progress
+            case .leastProgress:
+                return a.progress < b.progress
+            case .mostProgress:
+                return a.progress > b.progress
+            case .mostTasksLeft:
+                let aLeft = a.dailyTasks.filter { !$0.isCompleted }.count
+                let bLeft = b.dailyTasks.filter { !$0.isCompleted }.count
+                return aLeft > bLeft
+            case .newest:
+                return (a.dailyTasks.first?.createdAt ?? .distantPast) > (b.dailyTasks.first?.createdAt ?? .distantPast)
+            case .dueDate:
+                let aDate = a.dailyTasks.compactMap(\.dueDate).min() ?? .distantFuture
+                let bDate = b.dailyTasks.compactMap(\.dueDate).min() ?? .distantFuture
+                return aDate < bDate
+            }
         }
     }
 
     // MARK: - Active Journeys
     private var activeJourneysSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Your Destination")
-                .font(NoorFont.largeTitle)
-                .foregroundStyle(.white)
+            HStack {
+                Text("Current Journeys")
+                    .font(NoorFont.title)
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                Menu {
+                    ForEach(DestinationSort.allCases, id: \.self) { sort in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                destinationSort = sort
+                            }
+                        } label: {
+                            Label(sort.label, systemImage: sort.icon)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal.decrease")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(destinationSort == .default ? Color.noorTextSecondary : Color.noorAccent)
+                        .frame(width: 36, height: 36)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Circle())
+                }
+            }
 
             ForEach(sortedGoals, id: \.id) { goal in
                 SwipeActionCard(
@@ -663,9 +824,11 @@ struct DashboardView: View {
     // MARK: - Data Loading
     private func loadGoals() {
         Task { @MainActor in
-            isLoading = true
+            // Only show loading spinner on first load, not on refreshes
+            let isFirstLoad = goals.isEmpty && errorMessage == nil
+            if isFirstLoad { isLoading = true }
             errorMessage = nil
-            defer { isLoading = false }
+            defer { if isFirstLoad { isLoading = false } }
             do {
                 goals = try await dataManager.fetchAllGoals()
             } catch {
@@ -688,11 +851,42 @@ struct DashboardView: View {
         }
     }
 
+    /// Update streak based on consecutive daily app opens and show popup if first open today
     private func tryShowDailyFlame() {
-        guard globalStreak > 0 else { return }
         let today = calendar.startOfDay(for: Date())
-        let lastShown = UserDefaults.standard.object(forKey: StorageKey.lastDailyFlameDate) as? Date
-        if lastShown == nil || !calendar.isDate(lastShown!, inSameDayAs: today) {
+        let lastOpenDate = UserDefaults.standard.object(forKey: StorageKey.lastAppOpenDate) as? Date
+        let lastShownDate = UserDefaults.standard.object(forKey: StorageKey.lastDailyFlameDate) as? Date
+        
+        // Check if this is the first open today
+        let isFirstOpenToday = lastOpenDate == nil || !calendar.isDate(lastOpenDate!, inSameDayAs: today)
+        
+        if isFirstOpenToday {
+            // Update streak based on consecutive days
+            if let lastOpen = lastOpenDate {
+                let lastDay = calendar.startOfDay(for: lastOpen)
+                let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+                
+                if calendar.isDate(lastDay, inSameDayAs: yesterday) {
+                    // Consecutive day - increment streak
+                    globalStreak += 1
+                } else if lastDay < yesterday {
+                    // Skipped a day - reset streak to 1
+                    globalStreak = 1
+                }
+                // If somehow lastDay == today (shouldn't happen), streak stays same
+            } else {
+                // First time ever opening - start streak at 1
+                globalStreak = 1
+            }
+            
+            // Save updated streak and app open date
+            UserDefaults.standard.set(globalStreak, forKey: StorageKey.streakCount)
+            UserDefaults.standard.set(today, forKey: StorageKey.lastAppOpenDate)
+        }
+        
+        // Show popup if not already shown today
+        let shouldShowPopup = lastShownDate == nil || !calendar.isDate(lastShownDate!, inSameDayAs: today)
+        if shouldShowPopup && globalStreak > 0 {
             showDailyFlame = true
         }
     }
@@ -725,66 +919,6 @@ struct DashboardView: View {
     }
 }
 
-// MARK: - From your vision (one card for Home)
-private struct FromYourVisionBlock: View {
-    let items: [VisionItem]
-    let onOpen: (VisionItem) -> Void
-
-    private var firstUncompleted: VisionItem? {
-        items.first { !$0.isCompleted }
-    }
-
-    var body: some View {
-        if let item = firstUncompleted {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 18))
-                        .foregroundStyle(Color.noorRoseGold)
-                    Text("From your vision")
-                        .font(NoorFont.title)
-                        .foregroundStyle(.white)
-                }
-                .padding(.horizontal, 4)
-
-                Button {
-                    onOpen(item)
-                } label: {
-                    HStack(spacing: 14) {
-                        Image(systemName: item.kind.icon)
-                            .font(.system(size: 20))
-                            .foregroundStyle(Color.noorRoseGold)
-                            .frame(width: 40, height: 40)
-                            .background(Color.white.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Act on it")
-                                .font(NoorFont.callout)
-                                .foregroundStyle(Color.noorTextSecondary)
-                            Text(item.title)
-                                .font(NoorFont.body)
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Color.noorRoseGold)
-                    }
-                    .padding(16)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-}
 
 // MARK: - Today Item Model
 private struct TodayItem {
@@ -800,7 +934,7 @@ private struct TodayItem {
     enum Kind { case mission, habit }
 }
 
-// MARK: - Journey Card
+// MARK: - Journey Card (Boarding Pass Style)
 struct JourneyCard: View {
     let goal: Goal
 
@@ -810,143 +944,100 @@ struct JourneyCard: View {
         return Double(completed) / Double(goal.dailyTasks.count) * 100
     }
 
-    private var currentChallenge: DailyTask? {
-        goal.dailyTasks
-            .sorted { $0.order < $1.order }
-            .first { $0.isUnlocked && !$0.isCompleted }
-    }
-
-    private var remainingChallenges: Int {
-        goal.dailyTasks.filter { !$0.isCompleted }.count
+    private var completedCount: Int {
+        goal.dailyTasks.filter { $0.isCompleted }.count
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Header
-            HStack(spacing: 12) {
-                Image(systemName: "cloud.fill")
-                    .font(.system(size: 24))
-                    .foregroundStyle(.white)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(goal.destination.isEmpty ? goal.title : goal.destination)
-                        .font(NoorFont.title2)
-                        .foregroundStyle(.white)
-
-                    if !goal.timeline.isEmpty {
-                        Text("Arrival: \(goal.timeline)")
-                            .font(NoorFont.callout)
-                            .foregroundStyle(Color.noorTextSecondary)
-                    }
-                }
-
+        VStack(spacing: 0) {
+            // Header bar
+            HStack {
+                Image(systemName: "airplane")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(white: 0.3))
+                Text("BOARDING PASS")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(white: 0.3))
+                    .tracking(1.5)
                 Spacer()
-
-                // Progress ring
-                ZStack {
-                    Circle()
-                        .stroke(Color.noorViolet.opacity(0.3), lineWidth: 4)
-                        .frame(width: 44, height: 44)
-
-                    Circle()
-                        .trim(from: 0, to: progress / 100)
-                        .stroke(
-                            progress >= 100 ? Color.noorSuccess : Color.noorRoseGold,
-                            style: StrokeStyle(lineWidth: 4, lineCap: .round)
-                        )
-                        .frame(width: 44, height: 44)
-                        .rotationEffect(.degrees(-90))
-
-                    if progress >= 100 {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Color.noorSuccess)
-                    } else {
-                        Text("\(Int(progress))%")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                }
+                (Text("Steps ")
+                    .foregroundStyle(Color(white: 0.5))
+                 + Text("\(completedCount) of \(goal.dailyTasks.count)")
+                    .foregroundStyle(goal.isComplete ? Color.noorSuccess : Color.noorAccent)
+                    .fontWeight(.semibold))
+                    .font(.system(size: 10, design: .monospaced))
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color(white: 0.92))
 
-            // Current challenge preview
-            if let challenge = currentChallenge {
-                HStack(spacing: 12) {
-                    Image(systemName: "arrow.right.circle.fill")
-                        .foregroundStyle(Color.noorAccent)
-
+            // Body
+            VStack(alignment: .leading, spacing: 10) {
+                // FROM and TO on same line
+                HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Today's Mission")
-                            .font(NoorFont.callout)
-                            .foregroundStyle(Color.noorTextSecondary)
-
-                        Text(challenge.title)
-                            .font(NoorFont.body)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
+                        Text("FROM")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.black)
+                        Text(goal.departure.isEmpty ? "Current You" : goal.departure)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.black)
                     }
 
                     Spacer()
 
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(Color.noorTextSecondary.opacity(0.5))
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("TO")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.black)
+                        Text(goal.destination.isEmpty ? goal.title : goal.destination)
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.black)
+                            .lineLimit(1)
+                    }
                 }
-                .padding(12)
-                .background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else if progress >= 100 {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.seal.fill")
-                        .foregroundStyle(Color.noorSuccess)
 
-                    Text("Journey Complete!")
-                        .font(NoorFont.body)
-                        .foregroundStyle(Color.noorSuccess)
+                // Flight path
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color(white: 0.65))
+                        .frame(width: 5, height: 5)
+
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Rectangle()
+                                .fill(Color(white: 0.8))
+                                .frame(height: 1)
+
+                            Rectangle()
+                                .fill(Color.noorAccent)
+                                .frame(width: geo.size.width * progress / 100, height: 2)
+
+                            Image(systemName: "airplane")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.noorAccent)
+                                .offset(x: max(0, geo.size.width * progress / 100 - 5))
+                        }
+                    }
+                    .frame(height: 10)
+
+                    Circle()
+                        .fill(progress >= 100 ? Color.noorSuccess : Color.noorAccent.opacity(0.4))
+                        .frame(width: 5, height: 5)
                 }
-                .padding(12)
-                .background(Color.noorSuccess.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                // ETA
+                if !goal.timeline.isEmpty {
+                    Text("ETA: \(goal.timeline)")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color(white: 0.45))
+                }
             }
-
-            // Remaining challenges
-            HStack(spacing: 6) {
-                Image(systemName: "list.bullet.rectangle.portrait")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color.noorAccent)
-
-                Text("\(remainingChallenges) of \(goal.dailyTasks.count) challenges left")
-                    .font(NoorFont.callout)
-                    .foregroundStyle(Color.noorTextSecondary)
-            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
         }
-        .padding(20)
-        .background(
-            LinearGradient(
-                colors: [Color.noorDeepPurple, Color.noorViolet.opacity(0.3)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .opacity(progress >= 100 ? 0.55 : 1.0)
-        .scaleEffect(progress >= 100 ? 0.96 : 1.0)
-    }
-
-    private func iconForCategory(_ category: String) -> String {
-        if let goalCat = GoalCategory(rawValue: category) {
-            return goalCat.icon
-        }
-        switch category.lowercased() {
-        case "fitness": return "figure.run"
-        case "mindfulness": return "brain.head.profile"
-        case "productivity": return "bolt.fill"
-        case "financial habits", "finance": return "dollarsign.circle.fill"
-        case "parenthood", "relationship": return "heart.fill"
-        case "personal growth", "growth": return "leaf.fill"
-        case "travel": return "airplane"
-        case "career": return "briefcase.fill"
-        default: return "target"
-        }
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -1075,7 +1166,7 @@ struct SwipeActionCard<Content: View>: View {
     }
 }
 
-// MARK: - Edit Dream Sheet
+// MARK: - Edit Final Destination Sheet
 private struct EditDreamSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(DataManager.self) private var dataManager
@@ -1087,47 +1178,46 @@ private struct EditDreamSheet: View {
     @State private var selectedCategory: GoalCategory?
     @State private var isSaving = false
 
+    private var canSave: Bool {
+        !destination.trimmingCharacters(in: .whitespaces).isEmpty
+            && selectedCategory != nil
+            && !isSaving
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    // Category
-                    VStack(alignment: .leading, spacing: 8) {
+                    // Category (dropdown)
+                    VStack(alignment: .leading, spacing: 10) {
                         Text("Category")
+                            .font(NoorFont.title2)
+                            .foregroundStyle(.white)
+
+                        Text("Select the category for your destination")
                             .font(NoorFont.caption)
                             .foregroundStyle(Color.noorTextSecondary)
 
-                        HStack(spacing: 10) {
+                        Picker("Category", selection: $selectedCategory) {
+                            Text("Select category").tag(nil as GoalCategory?)
                             ForEach(GoalCategory.allCases) { cat in
-                                Button {
-                                    selectedCategory = cat
-                                } label: {
-                                    VStack(spacing: 6) {
-                                        Image(systemName: cat.icon)
-                                            .font(.system(size: 20))
-                                        Text(cat.displayName)
-                                            .font(.system(size: 10))
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .background(selectedCategory == cat ? Color.noorAccent.opacity(0.3) : Color.white.opacity(0.08))
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(selectedCategory == cat ? Color.noorAccent : Color.clear, lineWidth: 1.5)
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(selectedCategory == cat ? Color.noorAccent : Color.noorTextSecondary)
+                                Label(cat.displayName, systemImage: cat.icon)
+                                    .tag(cat as GoalCategory?)
                             }
                         }
+                        .pickerStyle(.menu)
+                        .tint(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
 
                     // Destination
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 10) {
                         Text("Destination")
-                            .font(NoorFont.caption)
-                            .foregroundStyle(Color.noorTextSecondary)
+                            .font(NoorFont.title2)
+                            .foregroundStyle(.white)
 
                         TextField("Your goal", text: $destination)
                             .font(NoorFont.body)
@@ -1138,10 +1228,10 @@ private struct EditDreamSheet: View {
                     }
 
                     // Timeline
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 10) {
                         Text("When are you arriving?")
-                            .font(NoorFont.caption)
-                            .foregroundStyle(Color.noorTextSecondary)
+                            .font(NoorFont.title2)
+                            .foregroundStyle(.white)
 
                         TextField("June 2026", text: $timeline)
                             .font(NoorFont.body)
@@ -1152,10 +1242,10 @@ private struct EditDreamSheet: View {
                     }
 
                     // User story
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 10) {
                         Text("Why does this matter to you?")
-                            .font(NoorFont.caption)
-                            .foregroundStyle(Color.noorTextSecondary)
+                            .font(NoorFont.title2)
+                            .foregroundStyle(.white)
 
                         TextEditor(text: $userStory)
                             .font(NoorFont.body)
@@ -1167,7 +1257,7 @@ private struct EditDreamSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
 
-                    // Save button
+                    // Save button (enabled only when required fields are filled)
                     Button {
                         save()
                     } label: {
@@ -1176,17 +1266,17 @@ private struct EditDreamSheet: View {
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
-                            .background(Color.noorAccent)
+                            .background(canSave ? Color.noorAccent : Color.noorAccent.opacity(0.4))
                             .clipShape(RoundedRectangle(cornerRadius: 20))
                     }
                     .buttonStyle(.plain)
-                    .disabled(isSaving)
+                    .disabled(!canSave)
                     .padding(.top, 8)
                 }
                 .padding(20)
             }
             .background(Color.noorBackground)
-            .navigationTitle("Edit Dream")
+            .navigationTitle("Edit Final Destination")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
@@ -1205,8 +1295,10 @@ private struct EditDreamSheet: View {
     }
 
     private func save() {
+        guard canSave else { return }
         isSaving = true
-        goal.destination = destination
+        let trimmedDestination = destination.trimmingCharacters(in: .whitespaces)
+        goal.destination = trimmedDestination
         goal.timeline = timeline
         goal.userStory = userStory
         if let cat = selectedCategory {
@@ -1215,13 +1307,123 @@ private struct EditDreamSheet: View {
         Task { @MainActor in
             do {
                 try await dataManager.saveContext()
+                dismiss()
             } catch {
                 print("Failed to save dream edits: \(error)")
             }
             isSaving = false
-            dismiss()
         }
     }
+}
+
+// MARK: - Habit Science Facts (25 variations for popup)
+struct HabitScienceFact: Identifiable {
+    let id = UUID()
+    let title: String
+    let description: String
+    
+    static let allFacts: [HabitScienceFact] = [
+        HabitScienceFact(
+            title: "The 21-Day Myth",
+            description: "Research shows habits take 66 days on average to form, not 21. But consistency matters more than perfection—missing one day doesn't reset your progress."
+        ),
+        HabitScienceFact(
+            title: "Habit Stacking",
+            description: "Link new habits to existing ones. 'After I [current habit], I will [new habit].' This uses your brain's existing neural pathways to build new behaviors."
+        ),
+        HabitScienceFact(
+            title: "The 2-Minute Rule",
+            description: "Make habits so small they take less than 2 minutes. Reading one page beats not reading. The goal is to become the person who shows up."
+        ),
+        HabitScienceFact(
+            title: "Environment Design",
+            description: "Your environment shapes your behavior more than willpower. Make good habits obvious and easy; make bad habits invisible and hard."
+        ),
+        HabitScienceFact(
+            title: "Identity-Based Habits",
+            description: "Focus on who you want to become, not what you want to achieve. Each small action is a vote for your new identity."
+        ),
+        HabitScienceFact(
+            title: "The Habit Loop",
+            description: "Every habit follows: Cue → Craving → Response → Reward. Understanding this loop helps you redesign your behaviors intentionally."
+        ),
+        HabitScienceFact(
+            title: "Dopamine & Anticipation",
+            description: "Dopamine rises in anticipation of a reward, not just during it. This is why making habits attractive and exciting helps them stick."
+        ),
+        HabitScienceFact(
+            title: "Implementation Intentions",
+            description: "'I will [behavior] at [time] in [location]' makes you 2-3x more likely to follow through. Specificity removes decision fatigue."
+        ),
+        HabitScienceFact(
+            title: "The Plateau of Latent Potential",
+            description: "Results often lag behind effort. Like ice melting at 32°F, your work compounds beneath the surface before visible breakthroughs appear."
+        ),
+        HabitScienceFact(
+            title: "Temptation Bundling",
+            description: "Pair habits you need to do with things you want to do. Listen to your favorite podcast only while exercising—anticipation drives action."
+        ),
+        HabitScienceFact(
+            title: "The Goldilocks Rule",
+            description: "Humans stay motivated when working on tasks of 'just manageable difficulty'—not too easy, not too hard. Adjust challenge levels to stay engaged."
+        ),
+        HabitScienceFact(
+            title: "Never Miss Twice",
+            description: "Missing once is an accident. Missing twice starts a new habit. Get back on track immediately—the compound effect of consistency is powerful."
+        ),
+        HabitScienceFact(
+            title: "Reward Timing",
+            description: "Immediate rewards beat delayed ones. Celebrate small wins right after completing habits to reinforce the behavior in your brain."
+        ),
+        HabitScienceFact(
+            title: "Social Proof",
+            description: "We adopt habits of those around us. Surround yourself with people who have the habits you want—you become the average of your environment."
+        ),
+        HabitScienceFact(
+            title: "Variable Rewards",
+            description: "Unpredictable rewards create stronger habits than consistent ones. This is why habits with surprise elements are more engaging."
+        ),
+        HabitScienceFact(
+            title: "Habit Tracking",
+            description: "Tracking creates awareness. Seeing your streak builds momentum and makes the cost of breaking it emotionally real."
+        ),
+        HabitScienceFact(
+            title: "The Fresh Start Effect",
+            description: "New beginnings (Mondays, new months, birthdays) increase motivation. Use these moments to launch new habits."
+        ),
+        HabitScienceFact(
+            title: "Friction Reduction",
+            description: "Every step between you and a habit is friction. Reduce steps for good habits; add steps for bad ones. Convenience wins."
+        ),
+        HabitScienceFact(
+            title: "Keystone Habits",
+            description: "Some habits trigger cascade effects. Exercise often leads to better eating, better sleep, and more energy. Find your keystone."
+        ),
+        HabitScienceFact(
+            title: "The Power of Ritual",
+            description: "Pre-habit rituals signal your brain it's time to perform. Athletes use this—a specific warmup routine puts them in the zone."
+        ),
+        HabitScienceFact(
+            title: "Neuroplasticity",
+            description: "Your brain physically changes with repetition. Neural pathways strengthen each time you practice, making habits literally easier over time."
+        ),
+        HabitScienceFact(
+            title: "Decision Fatigue",
+            description: "Willpower depletes throughout the day. Schedule important habits for when your self-control is highest—usually mornings."
+        ),
+        HabitScienceFact(
+            title: "The Seinfeld Strategy",
+            description: "Jerry Seinfeld wrote jokes daily and marked X's on a calendar. His only goal: 'Don't break the chain.' Visual streaks motivate."
+        ),
+        HabitScienceFact(
+            title: "Cue Specificity",
+            description: "Vague cues fail. 'Exercise more' loses to 'Put on running shoes at 7am.' The more specific the trigger, the more reliable the habit."
+        ),
+        HabitScienceFact(
+            title: "Habit Graduation",
+            description: "Once a habit is automatic, increase the challenge slightly. This prevents boredom and continues growth. Small upgrades, big results."
+        ),
+    ]
 }
 
 #Preview {

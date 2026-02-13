@@ -9,10 +9,24 @@
 import SwiftUI
 import SwiftData
 import UIKit
+import UserNotifications
 
-enum HabitsTab: String, CaseIterable {
-    case microHabits = "Micro Habits"
-    case journeyHabits = "Journey Habits"
+enum HabitFilter: String, CaseIterable {
+    case all = "All Habits"
+    case journey = "Journey Habits"
+    case completed = "Completed"
+    case archived = "Archived"
+    case recent = "Recent"
+    
+    var icon: String {
+        switch self {
+        case .all: return "list.bullet"
+        case .journey: return "airplane"
+        case .completed: return "checkmark.circle.fill"
+        case .archived: return "archivebox.fill"
+        case .recent: return "clock.fill"
+        }
+    }
 }
 
 struct MicrohabitsView: View {
@@ -31,14 +45,32 @@ struct MicrohabitsView: View {
     @State private var habitForActions: Microhabit?  // tap card → show Edit/Delete
     @State private var errorMessage: String?
     @State private var selectedScienceLesson: HabitScienceLesson?
-    @State private var selectedHabitsTab: HabitsTab = .microHabits
+    @AppStorage("hasSeenHabitsIntro") private var hasSeenHabitsIntro: Bool = false
+    @State private var selectedFilter: HabitFilter = .all
+    @State private var showFilterMenu = false
+    @State private var habitToDelete: Microhabit?
+    @State private var showDeleteConfirmation = false
 
-    /// Standalone habits (not linked to a journey)
-    private var microHabitsOnly: [Microhabit] {
-        microhabits.filter { $0.goalID == nil }
+    private static let recentDays: Int = 7
+    
+    /// Filtered habits based on selected filter
+    private var filteredHabits: [Microhabit] {
+        switch selectedFilter {
+        case .all:
+            return microhabits.filter { !$0.isArchived }
+        case .journey:
+            return microhabits.filter { $0.goalID != nil && !$0.isArchived }
+        case .completed:
+            return microhabits.filter { !$0.completedDates.isEmpty && !$0.isArchived }
+        case .archived:
+            return microhabits.filter { $0.isArchived }
+        case .recent:
+            let cutoff = Calendar.current.date(byAdding: .day, value: -Self.recentDays, to: Date()) ?? Date()
+            return microhabits.filter { $0.createdAt >= cutoff && !$0.isArchived }
+        }
     }
-
-    /// Journeys that have at least one linked habit
+    
+    /// Journeys that have at least one linked habit (for showing journey names)
     private var journeysWithHabits: [Goal] {
         let linkedIDs = Set(microhabits.compactMap(\.goalID))
         return goals.filter { linkedIDs.contains($0.id.uuidString) }
@@ -66,62 +98,16 @@ struct MicrohabitsView: View {
                             .padding(.horizontal)
                     }
                 } else {
-                    VStack(spacing: 0) {
-                        Picker("", selection: $selectedHabitsTab) {
-                            ForEach(HabitsTab.allCases, id: \.self) { tab in
-                                Text(tab.rawValue).tag(tab)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            if filteredHabits.isEmpty {
+                                emptyStateHabits
+                            } else {
+                                allHabitsList
                             }
                         }
-                        .pickerStyle(.segmented)
-                        .tint(Color.noorTextSecondary)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .onAppear {
-                            // Selected segment: subtext color (light purple) with dark text for readability
-                            UISegmentedControl.appearance().selectedSegmentTintColor = UIColor(red: 233/255, green: 213/255, blue: 255/255, alpha: 1) // noorTextSecondary
-                            UISegmentedControl.appearance().setTitleTextAttributes([.foregroundColor: UIColor(red: 15/255, green: 10/255, blue: 30/255, alpha: 1)], for: .selected) // noorBackground
-                        }
-
-                        switch selectedHabitsTab {
-                        case .microHabits:
-                            ScrollView {
-                                VStack(alignment: .leading, spacing: 14) {
-                                    // Subtext explaining micro habits
-                                    Text("Stand-alone habits you do daily, independent of any journey.")
-                                        .font(NoorFont.caption)
-                                        .foregroundStyle(Color.noorTextSecondary)
-                                        .padding(.horizontal, 20)
-                                        .padding(.bottom, 4)
-                                    
-                                    if microHabitsOnly.isEmpty {
-                                        emptyStateMicroHabits
-                                    } else {
-                                        habitsGroupedByTimeframe(habits: microHabitsOnly)
-                                    }
-                                }
-                                .padding(.top, 8)
-                                .padding(.bottom, 24)
-                            }
-                        case .journeyHabits:
-                            ScrollView {
-                                VStack(alignment: .leading, spacing: 14) {
-                                    // Subtext explaining journey habits
-                                    Text("Habits tied to a specific journey to help you reach that goal.")
-                                        .font(NoorFont.caption)
-                                        .foregroundStyle(Color.noorTextSecondary)
-                                        .padding(.horizontal, 20)
-                                        .padding(.bottom, 4)
-                                    
-                                    if journeysWithHabits.isEmpty {
-                                        emptyStateJourneyHabits
-                                    } else {
-                                        journeyHabitsList
-                                    }
-                                }
-                                .padding(.top, 8)
-                                .padding(.bottom, 24)
-                            }
-                        }
+                        .padding(.top, 8)
+                        .padding(.bottom, 100)
                     }
                 }
             }
@@ -129,14 +115,9 @@ struct MicrohabitsView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "leaf.fill")
-                            .font(.system(size: 18))
-                            .foregroundStyle(.white)
-                        Text("Habits")
-                            .font(.system(size: 24, weight: .bold, design: .serif))
-                            .foregroundStyle(.white)
-                    }
+                    Text("Habits")
+                        .font(.system(size: 24, weight: .bold, design: .serif))
+                        .foregroundStyle(.white)
                 }
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -151,20 +132,49 @@ struct MicrohabitsView: View {
                     .allowsHitTesting(!isLoading && errorMessage == nil)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        showAddHabitModal = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 20, weight: .semibold))
+                    HStack(spacing: 12) {
+                        // Filter menu
+                        Menu {
+                            ForEach(HabitFilter.allCases, id: \.self) { filter in
+                                Button {
+                                    selectedFilter = filter
+                                } label: {
+                                    Label(filter.rawValue, systemImage: filter.icon)
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: selectedFilter.icon)
+                                    .font(.system(size: 16))
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 10, weight: .semibold))
+                            }
                             .foregroundStyle(.white)
+                        }
+                        .allowsHitTesting(!isLoading && errorMessage == nil)
+                        
+                        // Add button
+                        Button {
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            showAddForm = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(.white)
+                        }
+                        .buttonStyle(.plain)
+                        .allowsHitTesting(!isLoading && errorMessage == nil)
                     }
-                    .buttonStyle(.plain)
-                    .allowsHitTesting(!isLoading && errorMessage == nil)
                 }
             }
             .onAppear {
                 loadData()
+                if !hasSeenHabitsIntro {
+                    hasSeenHabitsIntro = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        selectedScienceLesson = HabitScienceLesson.dailyLesson
+                    }
+                }
             }
             .refreshable {
                 loadData()
@@ -179,6 +189,10 @@ struct MicrohabitsView: View {
                         showEditSheet = true
                         habitForActions = nil
                     }
+                    Button(h.isArchived ? "Unarchive" : "Archive") {
+                        archiveHabit(h, archive: !h.isArchived)
+                        habitForActions = nil
+                    }
                     Button("Delete", role: .destructive) {
                         deleteHabit(h)
                         habitForActions = nil
@@ -188,7 +202,7 @@ struct MicrohabitsView: View {
                     habitForActions = nil
                 }
             } message: {
-                Text("Edit or delete this habit?")
+                Text("Edit, archive, or delete this habit?")
             }
             .sheet(isPresented: $showAddHabitModal, onDismiss: {
                 if pendingAddForm {
@@ -256,6 +270,20 @@ struct MicrohabitsView: View {
                     .environment(dataManager)
                 }
             }
+            .alert("Delete Habit", isPresented: $showDeleteConfirmation) {
+                Button("Cancel", role: .cancel) {
+                    habitToDelete = nil
+                }
+                Button("Delete", role: .destructive) {
+                    confirmDeleteHabit()
+                }
+            } message: {
+                if let habit = habitToDelete {
+                    Text("Are you sure you want to delete \"\(habit.title)\"? This can't be undone.")
+                } else {
+                    Text("Are you sure you want to delete this habit? This can't be undone.")
+                }
+            }
             .fullScreenCover(isPresented: Binding(
                 get: { habitForTimer != nil },
                 set: { if !$0 { habitForTimer = nil } }
@@ -272,7 +300,13 @@ struct MicrohabitsView: View {
                     lesson: lesson,
                     allLessons: HabitScienceLesson.allLessons,
                     onSelectLesson: { selectedScienceLesson = $0 },
-                    onDismiss: { selectedScienceLesson = nil }
+                    onDismiss: { selectedScienceLesson = nil },
+                    onAddHabit: {
+                        selectedScienceLesson = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            showAddForm = true
+                        }
+                    }
                 )
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
@@ -309,6 +343,91 @@ struct MicrohabitsView: View {
         .padding(.bottom, 100)
     }
 
+    // MARK: - All Habits List (unified view with category badges)
+    private var allHabitsList: some View {
+        LazyVStack(alignment: .leading, spacing: 8) {
+            ForEach(filteredHabits, id: \.id) { habit in
+                SwipeActionCard(
+                    onEdit: {
+                        habitToEdit = habit
+                        showEditSheet = true
+                    },
+                    onDelete: { deleteHabit(habit) }
+                ) {
+                    MicrohabitCard(
+                        habit: habit,
+                        linkedGoal: goals.first { $0.id.uuidString == habit.goalID },
+                        onStartFocus: { habitForTimer = habit },
+                        onEdit: {
+                            habitToEdit = habit
+                            showEditSheet = true
+                        },
+                        onDelete: { deleteHabit(habit) },
+                        onTap: { habitForActions = habit }
+                    )
+                }
+                .padding(.horizontal, 20)
+            }
+        }
+    }
+
+    // MARK: - Unified Empty State
+    private var emptyStateHabits: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "leaf.fill")
+                .font(.system(size: 48))
+                .foregroundStyle(Color.noorSuccess.opacity(0.8))
+
+            VStack(spacing: 8) {
+                Text("Build your daily rhythm")
+                    .font(NoorFont.title)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+
+                Text(emptyStateMessage)
+                    .font(NoorFont.body)
+                    .foregroundStyle(Color.noorTextSecondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button {
+                let generator = UIImpactFeedbackGenerator(style: .medium)
+                generator.impactOccurred()
+                showAddForm = true
+            } label: {
+                Text("Add a habit")
+                    .font(NoorFont.button)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(Color.noorSuccess)
+                    .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 8)
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity)
+        .background(Color.white.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .padding(.horizontal, 20)
+    }
+    
+    private var emptyStateMessage: String {
+        switch selectedFilter {
+        case .all:
+            return "Add habits to build consistency. Link them to a journey or keep them standalone."
+        case .journey:
+            return "No journey habits yet. Link habits to your journeys when creating them."
+        case .completed:
+            return "Habits you've completed at least once will show here. Complete one to see it."
+        case .archived:
+            return "Archived habits move here. Archive from the habit's edit menu."
+        case .recent:
+            return "Habits you added in the last 7 days appear here."
+        }
+    }
+
     private var emptyStateMicroHabits: some View {
         VStack(spacing: 20) {
             Image(systemName: "sparkles")
@@ -335,7 +454,7 @@ struct MicrohabitsView: View {
             Button {
                 let generator = UIImpactFeedbackGenerator(style: .medium)
                 generator.impactOccurred()
-                showAddHabitModal = true
+                showAddForm = true
             } label: {
                 Text("Add a habit")
                     .font(NoorFont.button)
@@ -382,7 +501,7 @@ struct MicrohabitsView: View {
             Button {
                 let generator = UIImpactFeedbackGenerator(style: .medium)
                 generator.impactOccurred()
-                showAddHabitModal = true
+                showAddForm = true
             } label: {
                 Text("Add a habit")
                     .font(NoorFont.button)
@@ -523,7 +642,7 @@ struct MicrohabitsView: View {
                 microhabits = try await dataManager.fetchMicrohabits()
                 goals = try await dataManager.fetchAllGoals()
                 print("📊 Loaded \(microhabits.count) habits, \(goals.count) goals")
-                print("📊 Micro habits only (goalID == nil): \(microHabitsOnly.count)")
+                print("📊 Micro habits only (goalID == nil): \(microhabits.filter { $0.goalID == nil }.count)")
                 for habit in microhabits {
                     print("  - \(habit.title) (goalID: \(habit.goalID ?? "nil"))")
                 }
@@ -535,10 +654,29 @@ struct MicrohabitsView: View {
     }
 
     private func deleteHabit(_ habit: Microhabit) {
+        habitToDelete = habit
+        showDeleteConfirmation = true
+    }
+
+    private func confirmDeleteHabit() {
+        guard let habit = habitToDelete else { return }
         Task {
             do {
                 try await dataManager.deleteMicrohabit(habit.id)
                 loadData()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+        habitToDelete = nil
+    }
+    
+    private func archiveHabit(_ habit: Microhabit, archive: Bool) {
+        habit.isArchived = archive
+        Task {
+            do {
+                try await dataManager.saveMicrohabit(habit)
+                await MainActor.run { loadData() }
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -649,6 +787,7 @@ struct HabitScienceLessonSheetContent: View {
     let allLessons: [HabitScienceLesson]
     let onSelectLesson: (HabitScienceLesson) -> Void
     let onDismiss: () -> Void
+    var onAddHabit: (() -> Void)? = nil
 
     private var otherLessons: [HabitScienceLesson] {
         allLessons.filter { $0.id != lesson.id }
@@ -730,6 +869,24 @@ struct HabitScienceLessonSheetContent: View {
                                 }
                             }
                         }
+
+                        // Add a habit CTA
+                        if let onAddHabit {
+                            Button {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                onAddHabit()
+                            } label: {
+                                Text("Add a habit")
+                                    .font(NoorFont.button)
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 52)
+                                    .background(Color.noorSuccess)
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 12)
+                        }
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
@@ -785,17 +942,34 @@ struct MicrohabitCard: View {
                         .lineLimit(3)
                 }
 
-                // Journey link and tag only (timeframe is in the section header)
+                // Category badge and journey/tag info
                 HStack(spacing: 8) {
+                    // Category badge
                     if let goal = linkedGoal {
                         HStack(spacing: 4) {
                             Image(systemName: "airplane.departure")
-                                .font(.system(size: 11))
+                                .font(.system(size: 10))
                             Text(goal.destination.isEmpty ? goal.title : goal.destination)
-                                .font(NoorFont.caption)
+                                .font(.system(size: 11))
                                 .lineLimit(1)
                         }
-                        .foregroundStyle(Color.noorSuccess.opacity(0.9))
+                        .foregroundStyle(Color.noorAccent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.noorAccent.opacity(0.15))
+                        .clipShape(Capsule())
+                    } else {
+                        HStack(spacing: 4) {
+                            Image(systemName: "leaf.fill")
+                                .font(.system(size: 10))
+                            Text("Micro")
+                                .font(.system(size: 11))
+                        }
+                        .foregroundStyle(Color.noorSuccess)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.noorSuccess.opacity(0.15))
+                        .clipShape(Capsule())
                     }
 
                     if let tag = habit.customTag, !tag.isEmpty {
@@ -1004,6 +1178,7 @@ struct AddHabitOptionRow: View {
 // MARK: - Add / Edit Microhabit Form (links to goal, focus duration)
 struct AddMicrohabitView: View {
     @Environment(DataManager.self) private var dataManager
+    @Environment(\.dismiss) private var dismiss
     let initialType: MicrohabitType
     var initialTitle: String = ""  // title from modal
     var initialDescription: String = ""  // description from modal
@@ -1051,12 +1226,15 @@ struct AddMicrohabitView: View {
         }
     }
 
+    var initialGoalID: String? = nil
+
     init(
         initialType: MicrohabitType,
         initialTitle: String = "",
         initialDescription: String = "",
         goals: [Goal],
         existing: Microhabit? = nil,
+        initialGoalID: String? = nil,
         onDismiss: @escaping () -> Void,
         onSave: @escaping () -> Void
     ) {
@@ -1065,11 +1243,13 @@ struct AddMicrohabitView: View {
         self.initialDescription = initialDescription
         self.goals = goals
         self.existing = existing
+        self.initialGoalID = initialGoalID
         self.onDismiss = onDismiss
         self.onSave = onSave
         // Initialize from existing habit or from modal input
         _title = State(initialValue: existing?.title ?? initialTitle)
         _habitDescription = State(initialValue: existing?.habitDescription ?? initialDescription)
+        _selectedGoalID = State(initialValue: existing?.goalID ?? initialGoalID)
     }
 
     /// Preset buttons only up to 20 min; 21–60 selected via slider to avoid horizontal scroll.
@@ -1107,7 +1287,7 @@ struct AddMicrohabitView: View {
                                 }
                             }
 
-                            Text("How it supports your grander vision")
+                            Text("How it supports your vision")
                                 .font(NoorFont.title)
                                 .foregroundStyle(.white)
                             TextField("I will ... so that I can become ...", text: $habitDescription, axis: .vertical)
@@ -1329,22 +1509,32 @@ struct AddMicrohabitView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 16))
 
                         Button {
-                            print("🔘 Add habit button tapped")
+                            print("🔘 Add habit button tapped - canSave: \(canSave), isSaving: \(isSaving)")
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                             saveHabit()
                         } label: {
-                            Text(existing == nil ? "Add habit" : "Save changes")
-                                .font(NoorFont.button)
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 52)
-                                .background(canSave ? Color.noorSuccess : Color.noorSuccess.opacity(0.4))
-                                .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
+                            HStack(spacing: 8) {
+                                if isSaving {
+                                    ProgressView()
+                                        .tint(.white)
+                                        .scaleEffect(0.8)
+                                }
+                                Text(existing == nil ? "Add habit" : "Save changes")
+                                    .font(NoorFont.button)
+                            }
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .background(canSave ? Color.noorSuccess : Color.noorSuccess.opacity(0.4))
+                            .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
                         }
                         .disabled(!canSave)
                         .padding(.top, 16)
                     }
-                    .padding(20)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 20)
                 }
                 .scrollDismissesKeyboard(.interactively)
             }
@@ -1368,7 +1558,7 @@ struct AddMicrohabitView: View {
                     .buttonStyle(.plain)
                 }
                 ToolbarItem(placement: .principal) {
-                    Text(existing == nil ? (title.isEmpty ? "New microhabit" : title) : "Edit habit")
+                    Text(title.isEmpty ? "New habit" : title)
                         .font(NoorFont.title2)
                         .foregroundStyle(.white)
                         .lineLimit(1)
@@ -1478,10 +1668,11 @@ struct AddMicrohabitView: View {
                     print("✅ Saved new habit to database")
                 }
                 
-                print("🔄 Calling onSave to dismiss and refresh...")
+                print("🔄 Dismissing and refreshing...")
                 isSaving = false
+                // Dismiss sheet first, then trigger parent refresh
+                dismiss()
                 onSave()
-                print("✅ onSave callback completed")
             } catch {
                 print("❌ Error saving habit: \(error)")
                 print("   Error details: \(error.localizedDescription)")
@@ -1692,6 +1883,7 @@ struct FocusTimerView: View {
                                     timer = nil
                                     isRunning = false
                                     remainingSeconds = totalSeconds
+                                    cancelTimerNotification()
                                     withAnimation(.easeOut(duration: 0.3)) {
                                         animatedProgress = 0
                                     }
@@ -1712,6 +1904,7 @@ struct FocusTimerView: View {
                                 if isRunning {
                                     timer?.invalidate()
                                     timer = nil
+                                    cancelTimerNotification()
                                 } else {
                                     startTimer()
                                 }
@@ -1755,6 +1948,7 @@ struct FocusTimerView: View {
         }
         .onDisappear {
             timer?.invalidate()
+            cancelTimerNotification()
         }
     }
 
@@ -1774,6 +1968,9 @@ struct FocusTimerView: View {
     }
 
     private func startTimer() {
+        // Schedule a local notification so the phone vibrates even if app is closed
+        scheduleTimerNotification()
+
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             if remainingSeconds > 0 {
                 remainingSeconds -= 1
@@ -1785,9 +1982,48 @@ struct FocusTimerView: View {
                 timer = nil
                 isRunning = false
                 hasCompleted = true
+                // Haptic burst on completion
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                }
             }
         }
         RunLoop.main.add(timer!, forMode: .common)
+    }
+
+    private func scheduleTimerNotification() {
+        // Remove any previous timer notification
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["focusTimer_\(habit.id.uuidString)"])
+
+        let content = UNMutableNotificationContent()
+        content.title = "Focus Complete!"
+        content.body = "You finished your \(habit.focusDurationMinutes)-minute session for \(habit.title)."
+        content.sound = .default // triggers vibration on silent mode too
+
+        let trigger = UNTimeIntervalNotificationTrigger(
+            timeInterval: TimeInterval(remainingSeconds),
+            repeats: false
+        )
+
+        let request = UNNotificationRequest(
+            identifier: "focusTimer_\(habit.id.uuidString)",
+            content: content,
+            trigger: trigger
+        )
+
+        center.add(request) { error in
+            if let error = error {
+                print("Failed to schedule focus timer notification: \(error)")
+            }
+        }
+    }
+
+    private func cancelTimerNotification() {
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: ["focusTimer_\(habit.id.uuidString)"])
     }
 }
 

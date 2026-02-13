@@ -36,7 +36,6 @@ struct ProfileView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         profileHeader
-                        statsSection
                         subscriptionSection
                         aboutSection
 

@@ -17,12 +17,31 @@ struct ChallengeCard: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(alignment: .top, spacing: 12) {
-                // Check or lock
+            HStack(alignment: .center, spacing: 12) {
+                // Title and duration — left-aligned
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(challenge.title)
+                        .font(NoorFont.body)
+                        .foregroundStyle(Color.noorCharcoal)
+                        .multilineTextAlignment(.leading)
+                        .strikethrough(isCompleted, color: Color.noorCharcoal.opacity(0.5))
+                    Text(challenge.durationText)
+                        .font(NoorFont.caption)
+                        .foregroundStyle(Color.noorCharcoal.opacity(0.7))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Spacer(minLength: 8)
+
+                // Check or lock — right-aligned
                 ZStack {
                     Circle()
-                        .fill(isCompleted ? Color.noorTeal : (isLocked ? Color.gray.opacity(0.3) : Color.noorPink.opacity(0.2)))
+                        .fill(isCompleted ? Color.noorTeal : (isLocked ? Color.gray.opacity(0.3) : Color.white))
                         .frame(width: 44, height: 44)
+                        .overlay(
+                            Circle()
+                                .stroke(isLocked ? Color.gray.opacity(0.4) : Color.noorPink.opacity(0.5), lineWidth: 1.5)
+                        )
                     if isLocked {
                         Image(systemName: "lock.fill")
                             .font(.system(size: 18))
@@ -38,24 +57,6 @@ struct ChallengeCard: View {
                     }
                 }
                 .animation(.easeInOut(duration: 0.25), value: isCompleted)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(challenge.title)
-                        .font(NoorFont.body)
-                        .foregroundStyle(Color.noorCharcoal)
-                        .multilineTextAlignment(.leading)
-                        .strikethrough(isCompleted, color: Color.noorCharcoal.opacity(0.5))
-                    Text(challenge.durationText)
-                        .font(NoorFont.caption)
-                        .foregroundStyle(Color.noorCharcoal.opacity(0.7))
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                if isLocked && !isCompleted {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color.noorPink)
-                }
             }
             .padding(20)
             .background(Color.white)

@@ -10,46 +10,62 @@ import SwiftUI
 import MapKit
 import UIKit
 
+// MARK: - Vision filter (like Habits: filter menu beside plus)
+enum VisionFilter: String, CaseIterable {
+    case all = "All"
+    case pinterest = "Pinterest"
+    case instagram = "Instagram"
+    case destination = "Places to Go"
+    case action = "Action Steps"
+    case journey = "Linked to Journey"
+    case completed = "Completed"
+    case toActOn = "To act on"
+    
+    var icon: String {
+        switch self {
+        case .all: return "square.grid.2x2"
+        case .pinterest: return "photo.on.rectangle.angled"
+        case .instagram: return "camera.fill"
+        case .destination: return "globe.americas.fill"
+        case .action: return "bolt.fill"
+        case .journey: return "airplane"
+        case .completed: return "checkmark.circle.fill"
+        case .toActOn: return "star.fill"
+        }
+    }
+}
+
 struct VisionView: View {
     @Environment(DataManager.self) private var dataManager
     @State private var items: [VisionItem] = []
     @State private var goals: [Goal] = []
     @State private var showAddSheet = false
-    @State private var organizationMode: VisionOrganizationMode = .byType
-    @State private var itemForActions: VisionItem?  // tap cell → show Open/Delete
+    @State private var selectedFilter: VisionFilter = .all
+    @State private var itemForActions: VisionItem?
+    @State private var itemToEdit: VisionItem?
     @State private var selectedScienceLesson: VisionScienceLesson?
     @State private var isLoading = false
     @State private var errorMessage: String?
 
-    enum VisionOrganizationMode: String, CaseIterable {
-        case byType = "By type"
-        case byJourney = "By journey"
-    }
-
-    private var groupedItems: [(String, [VisionItem])] {
-        switch organizationMode {
-        case .byType:
-            let pinterest = items.filter { $0.kind == .pinterest }
-            let instagram = items.filter { $0.kind == .instagram }
-            let dest = items.filter { $0.kind == .destination }
-            let action = items.filter { $0.kind == .action }
-            var result: [(String, [VisionItem])] = []
-            if !pinterest.isEmpty { result.append(("Pinterest", pinterest)) }
-            if !instagram.isEmpty { result.append(("Instagram", instagram)) }
-            if !dest.isEmpty { result.append(("Destinations", dest)) }
-            if !action.isEmpty { result.append(("Actions", action)) }
-            return result
-        case .byJourney:
-            var result: [(String, [VisionItem])] = []
-            for goal in goals {
-                let linked = items.filter { $0.goalID == goal.id.uuidString }
-                if !linked.isEmpty {
-                    result.append((goal.destination.isEmpty ? goal.title : goal.destination, linked))
-                }
-            }
-            let unlinked = items.filter { $0.goalID == nil || $0.goalID?.isEmpty == true }
-            if !unlinked.isEmpty { result.append(("Not linked to a journey", unlinked)) }
-            return result
+    /// Filtered vision items based on selected filter
+    private var filteredItems: [VisionItem] {
+        switch selectedFilter {
+        case .all:
+            return items
+        case .pinterest:
+            return items.filter { $0.kind == .pinterest }
+        case .instagram:
+            return items.filter { $0.kind == .instagram }
+        case .destination:
+            return items.filter { $0.kind == .destination }
+        case .action:
+            return items.filter { $0.kind == .action }
+        case .journey:
+            return items.filter { $0.goalID != nil && !($0.goalID?.isEmpty ?? true) }
+        case .completed:
+            return items.filter { $0.isCompleted }
+        case .toActOn:
+            return items.filter { !$0.isCompleted }
         }
     }
 
@@ -61,62 +77,16 @@ struct VisionView: View {
 
                 if items.isEmpty {
                     emptyState
+                } else if filteredItems.isEmpty {
+                    emptyStateFiltered
                 } else {
-                    VStack(spacing: 0) {
-                        Picker("Organize", selection: $organizationMode) {
-                            ForEach(VisionOrganizationMode.allCases, id: \.self) { m in
-                                Text(m.rawValue).tag(m)
-                            }
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            visionMetricsSection
+                            visionList
                         }
-                        .pickerStyle(.segmented)
-                        .tint(Color.noorTextSecondary)
-                        .padding(.horizontal, 20)
                         .padding(.top, 8)
-                        .padding(.bottom, 8)
-                        .onAppear {
-                            // Selected segment: subtext color (light purple) with dark text for readability
-                            UISegmentedControl.appearance().selectedSegmentTintColor = UIColor(red: 233/255, green: 213/255, blue: 255/255, alpha: 1) // noorTextSecondary
-                            UISegmentedControl.appearance().setTitleTextAttributes([.foregroundColor: UIColor(red: 15/255, green: 10/255, blue: 30/255, alpha: 1)], for: .selected) // noorBackground
-                        }
-
-                        List {
-                            ForEach(groupedItems, id: \.0) { groupName, groupItems in
-                                Section {
-                                    ForEach(groupItems) { item in
-                                        VisionItemCard(
-                                            item: item,
-                                            linkedGoalTitle: goals.first { $0.id.uuidString == item.goalID }.map { $0.destination.isEmpty ? $0.title : $0.destination },
-                                            onOpen: { openItem(item) },
-                                            onMap: item.kind == .destination ? { openInMaps(item) } : nil,
-                                            onMarkDone: { toggleDone(item) },
-                                            onDelete: { deleteItem(item) },
-                                            onTap: { itemForActions = item }
-                                        )
-                                        .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
-                                        .listRowSeparator(.hidden)
-                                        .listRowBackground(Color.clear)
-                                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                            Button("Open") {
-                                                openItem(item)
-                                            }
-                                            .tint(Color.noorRoseGold)
-                                        }
-                                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                            Button("Delete", role: .destructive) {
-                                                deleteItem(item)
-                                            }
-                                        }
-                                    }
-                                } header: {
-                                    Text(groupName)
-                                        .font(NoorFont.callout)
-                                        .foregroundStyle(Color.noorRoseGold)
-                                        .padding(.vertical, 4)
-                                }
-                            }
-                        }
-                        .listStyle(.plain)
-                        .scrollContentBackground(.hidden)
+                        .padding(.bottom, 100)
                     }
                 }
             }
@@ -128,10 +98,13 @@ struct VisionView: View {
                         Text("Vision")
                             .font(.system(size: 24, weight: .bold, design: .serif))
                             .foregroundStyle(.white)
-                        Text("See it, then act on it")
-                            .font(.system(size: 12, weight: .regular, design: .serif))
+                        Text("Build the life, then live it")
+                            .font(.system(size: 10, weight: .regular, design: .serif))
                             .foregroundStyle(Color.noorTextSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
                     }
+                    .frame(maxWidth: .infinity)
                 }
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -140,21 +113,42 @@ struct VisionView: View {
                     } label: {
                         Image(systemName: "eye.fill")
                             .font(.system(size: 20))
-                            .foregroundStyle(Color.noorRoseGold)
+                            .foregroundStyle(Color.noorOrange)
                     }
                     .buttonStyle(.plain)
                     .allowsHitTesting(!isLoading && errorMessage == nil)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        showAddSheet = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(Color.noorRoseGold)
+                    HStack(spacing: 12) {
+                        Menu {
+                            ForEach(VisionFilter.allCases, id: \.self) { filter in
+                                Button {
+                                    selectedFilter = filter
+                                } label: {
+                                    Label(filter.rawValue, systemImage: filter.icon)
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: selectedFilter.icon)
+                                    .font(.system(size: 16))
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 10, weight: .semibold))
+                            }
+                            .foregroundStyle(.white)
+                        }
+                        .allowsHitTesting(!isLoading && errorMessage == nil)
+                        
+                        Button {
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            showAddSheet = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(.white)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .sheet(item: $selectedScienceLesson) { lesson in
@@ -171,6 +165,10 @@ struct VisionView: View {
                         openItem(item)
                         itemForActions = nil
                     }
+                    Button("Edit") {
+                        itemToEdit = item
+                        itemForActions = nil
+                    }
                     Button("Delete", role: .destructive) {
                         deleteItem(item)
                         itemForActions = nil
@@ -180,7 +178,7 @@ struct VisionView: View {
                     itemForActions = nil
                 }
             } message: {
-                Text("Open or delete this item?")
+                Text("Open, edit, or delete this vision item?")
             }
             .onAppear {
                 loadItems()
@@ -195,6 +193,20 @@ struct VisionView: View {
                 AddVisionItemSheet(goals: goals, onDismiss: { showAddSheet = false }, onSaved: { showAddSheet = false })
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
+            }
+            .sheet(item: $itemToEdit) { item in
+                EditVisionItemSheet(
+                    item: item,
+                    goals: goals,
+                    onDismiss: { itemToEdit = nil },
+                    onSaved: {
+                        loadItems()
+                        loadGoals()
+                        itemToEdit = nil
+                    }
+                )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
             }
         }
     }
@@ -212,12 +224,12 @@ struct VisionView: View {
     private var emptyState: some View {
         VStack(spacing: 28) {
             VStack(spacing: 14) {
-                Text("You don't need permission")
+                Text("Picture your future")
                     .font(NoorFont.largeTitle)
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
 
-                Text("Add the life you want — travel, career moves, financial goals, and more.\nNoor helps you take the steps to get there.")
+                Text("Save what inspires you — boards, posts, places, actions.\nNoor turns your vision into daily steps.")
                     .font(NoorFont.body)
                     .foregroundStyle(Color.noorTextSecondary)
                     .multilineTextAlignment(.center)
@@ -227,20 +239,20 @@ struct VisionView: View {
             Button {
                 showAddSheet = true
             } label: {
-                Text("Create your vision")
+                Text("Add to your vision")
                     .font(NoorFont.button)
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
                     .background(
                         LinearGradient(
-                            colors: [Color.noorRoseGold, Color.noorOrange],
+                            colors: [Color.noorOrange, Color.noorOrange],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                     )
                     .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
-                    .shadow(color: Color.noorRoseGold.opacity(0.5), radius: 16, x: 0, y: 0)
+                    .shadow(color: Color.noorOrange.opacity(0.5), radius: 16, x: 0, y: 0)
                     .shadow(color: Color.noorOrange.opacity(0.3), radius: 24, x: 0, y: 4)
             }
             .buttonStyle(.plain)
@@ -248,6 +260,208 @@ struct VisionView: View {
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var emptyStateFiltered: some View {
+        VStack(spacing: 24) {
+            Image(systemName: selectedFilter.icon)
+                .font(.system(size: 48))
+                .foregroundStyle(Color.noorOrange.opacity(0.8))
+            VStack(spacing: 8) {
+                Text(emptyStateFilterMessage)
+                    .font(NoorFont.title)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 28)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var emptyStateFilterMessage: String {
+        switch selectedFilter {
+        case .all:
+            return "Add inspiration to your vision."
+        case .pinterest:
+            return "No Pinterest boards yet. Add one to fuel your vision."
+        case .instagram:
+            return "No Instagram posts saved. Add inspiration from the feed."
+        case .destination:
+            return "No places to go yet. Add destinations you're striving for."
+        case .action:
+            return "No action steps yet. Add the next move you'll take."
+        case .journey:
+            return "No items linked to a journey. Link items when adding or editing."
+        case .completed:
+            return "Completed items show here. Mark items done from the list."
+        case .toActOn:
+            return "Items you haven't acted on yet. Your priority list."
+        }
+    }
+
+    // MARK: - Vision Metrics (Redesigned for clarity)
+    private var visionMetricsSection: some View {
+        let total = items.count
+        let completed = items.filter { $0.isCompleted }.count
+        let toActOn = items.filter { !$0.isCompleted }.count
+        let byKind = Dictionary(grouping: items, by: { $0.kind })
+        
+        return VStack(spacing: 16) {
+            // Top row: Main progress + action needed
+            HStack(spacing: 12) {
+                // Overall progress - large and prominent
+                VStack(spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .stroke(Color.white.opacity(0.1), lineWidth: 8)
+                            .frame(width: 70, height: 70)
+                        Circle()
+                            .trim(from: 0, to: total > 0 ? CGFloat(completed) / CGFloat(total) : 0)
+                            .stroke(
+                                LinearGradient(colors: [Color.noorSuccess, Color.noorSuccess.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                            )
+                            .frame(width: 70, height: 70)
+                            .rotationEffect(.degrees(-90))
+                        VStack(spacing: 0) {
+                            Text("\(completed)")
+                                .font(.system(size: 22, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                            Text("done")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(Color.noorTextSecondary)
+                        }
+                    }
+                    Text("Completed")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.noorSuccess)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.noorSuccess.opacity(0.1))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.noorSuccess.opacity(0.3), lineWidth: 1)
+                        )
+                )
+                
+                // To act on - action-oriented
+                VStack(spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.noorOrange.opacity(0.15))
+                            .frame(width: 70, height: 70)
+                        VStack(spacing: 0) {
+                            Text("\(toActOn)")
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundStyle(Color.noorOrange)
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(Color.noorOrange.opacity(0.7))
+                        }
+                    }
+                    Text("To Act On")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.noorOrange)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.noorOrange.opacity(0.08))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.noorOrange.opacity(0.25), lineWidth: 1)
+                        )
+                )
+            }
+            
+            // Bottom row: Category breakdown with distinct colors
+            HStack(spacing: 10) {
+                ForEach(VisionItemKind.allCases, id: \.self) { kind in
+                    let count = byKind[kind]?.count ?? 0
+                    let color = colorForKind(kind)
+                    
+                    VStack(spacing: 6) {
+                        ZStack {
+                            Circle()
+                                .fill(color.opacity(0.15))
+                                .frame(width: 36, height: 36)
+                            Image(systemName: kind.icon)
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(color)
+                        }
+                        Text("\(count)")
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                        Text(shortNameForKind(kind))
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(Color.noorTextSecondary)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.white.opacity(0.04))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(color.opacity(0.2), lineWidth: 1)
+                            )
+                    )
+                }
+            }
+        }
+        .padding(.horizontal, NoorLayout.horizontalPadding)
+    }
+    
+    // Distinct colors for each vision type
+    private func colorForKind(_ kind: VisionItemKind) -> Color {
+        switch kind {
+        case .pinterest: return Color(hex: "E60023") // Pinterest red
+        case .instagram: return Color(hex: "C13584") // Instagram purple-pink
+        case .destination: return Color(hex: "4ECDC4") // Teal for travel
+        case .action: return Color(hex: "FFD93D") // Yellow for action
+        }
+    }
+    
+    // Short names for compact display
+    private func shortNameForKind(_ kind: VisionItemKind) -> String {
+        switch kind {
+        case .pinterest: return "Boards"
+        case .instagram: return "Posts"
+        case .destination: return "Places"
+        case .action: return "Actions"
+        }
+    }
+
+    private var visionList: some View {
+        LazyVStack(alignment: .leading, spacing: 8) {
+            ForEach(filteredItems, id: \.id) { item in
+                SwipeActionCard(
+                    onEdit: {
+                        itemToEdit = item
+                    },
+                    onDelete: { deleteItem(item) },
+                    editIcon: "pencil",
+                    editLabel: "Edit",
+                    editColor: Color.noorOrange
+                ) {
+                    VisionItemCard(
+                        item: item,
+                        linkedGoalTitle: goals.first { $0.id.uuidString == item.goalID }.map { $0.destination.isEmpty ? $0.title : $0.destination },
+                        onOpen: { openItem(item) },
+                        onMap: item.kind == .destination ? { openInMaps(item) } : nil,
+                        onMarkDone: { toggleDone(item) },
+                        onDelete: { deleteItem(item) },
+                        onTap: { itemForActions = item }
+                    )
+                }
+                .padding(.horizontal, 20)
+            }
+        }
     }
 
     private func loadItems() {
@@ -324,20 +538,39 @@ private struct VisionItemCard: View {
     let onMarkDone: () -> Void
     let onDelete: () -> Void
     var onTap: (() -> Void)? = nil
+    
+    // Distinct colors for each vision type
+    private var kindColor: Color {
+        switch item.kind {
+        case .pinterest: return Color(hex: "E60023") // Pinterest red
+        case .instagram: return Color(hex: "C13584") // Instagram purple-pink
+        case .destination: return Color(hex: "4ECDC4") // Teal for travel
+        case .action: return Color(hex: "FFD93D") // Yellow for action
+        }
+    }
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
+            // Checkmark to the left of the vision
+            Button(action: onMarkDone) {
+                Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 22))
+                    .foregroundStyle(item.isCompleted ? Color.noorSuccess : Color.noorTextSecondary.opacity(0.6))
+            }
+            .buttonStyle(.plain)
+
+            // Icon with distinct color per type
             Image(systemName: item.kind.icon)
-                .font(.system(size: 22))
-                .foregroundStyle(item.isCompleted ? Color.noorTextSecondary.opacity(0.7) : Color.noorRoseGold)
-                .frame(width: 44, height: 44)
-                .background(Color.white.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(item.isCompleted ? Color.noorTextSecondary.opacity(0.5) : kindColor)
+                .frame(width: 42, height: 42)
+                .background(item.isCompleted ? Color.white.opacity(0.05) : kindColor.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
                     .font(NoorFont.body)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(item.isCompleted ? Color.noorTextSecondary : .white)
                     .strikethrough(item.isCompleted, color: Color.noorTextSecondary)
                     .lineLimit(1)
 
@@ -348,7 +581,7 @@ private struct VisionItemCard: View {
                         Text(journey)
                             .font(NoorFont.caption)
                     }
-                    .foregroundStyle(Color.noorRoseGold.opacity(0.9))
+                    .foregroundStyle(Color.noorAccent.opacity(0.9))
                     .lineLimit(1)
                 } else if item.kind == .destination, let place = item.placeName ?? item.url {
                     Text(place)
@@ -368,47 +601,66 @@ private struct VisionItemCard: View {
                 onTap?()
             }
 
-            Spacer()
+            Spacer(minLength: 4)
 
+            // Action buttons with icons - styled with kind color
             HStack(spacing: 10) {
-                Button(action: onMarkDone) {
-                    Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 22))
-                        .foregroundStyle(item.isCompleted ? Color.noorSuccess : Color.noorTextSecondary)
-                }
-                .buttonStyle(.plain)
-
                 if item.kind == .destination {
                     Button(action: onOpen) {
-                        Text("Flights")
-                            .font(NoorFont.callout)
-                            .foregroundStyle(Color.noorRoseGold)
+                        HStack(spacing: 4) {
+                            Image(systemName: "airplane")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Flights")
+                                .font(.system(size: 12, weight: .semibold))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        .foregroundStyle(kindColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(kindColor.opacity(0.15))
+                        .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
                     if onMap != nil {
                         Button(action: { onMap?() }) {
-                            Text("Map")
-                                .font(NoorFont.callout)
+                            Image(systemName: "map.fill")
+                                .font(.system(size: 14, weight: .medium))
                                 .foregroundStyle(Color.noorTextSecondary)
+                                .frame(width: 32, height: 32)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(Circle())
                         }
                         .buttonStyle(.plain)
                     }
                 } else {
                     Button(action: onOpen) {
-                        Text("Open")
-                            .font(NoorFont.callout)
-                            .foregroundStyle(Color.noorRoseGold)
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.up.right")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Open")
+                                .font(.system(size: 12, weight: .semibold))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        .foregroundStyle(kindColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(kindColor.opacity(0.15))
+                        .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
-        .padding(16)
-        .background(item.isCompleted ? Color.white.opacity(0.04) : Color.white.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(item.isCompleted ? Color.white.opacity(0.03) : Color.white.opacity(0.05))
+        )
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(item.isCompleted ? Color.white.opacity(0.05) : kindColor.opacity(0.2), lineWidth: 1)
         )
     }
 }
@@ -531,11 +783,11 @@ private struct AddVisionItemSheet: View {
                         VStack(alignment: .leading, spacing: 0) {
                             // Header + subtext together
                             VStack(alignment: .leading, spacing: 10) {
-                                Text("Make your vision real.")
+                                Text("Add to your vision")
                                     .font(NoorFont.largeTitle)
                                     .foregroundStyle(.white)
 
-                                Text("Your vision only works when you act on it. Save what inspires you — Noor turns it into your next move.")
+                                Text("What does the life you're building look like? Save the inspiration that keeps you moving.")
                                     .font(NoorFont.bodyLarge)
                                     .foregroundStyle(Color.noorTextSecondary)
                             }
@@ -543,15 +795,11 @@ private struct AddVisionItemSheet: View {
 
                             // Section: What type
                             VStack(alignment: .leading, spacing: 10) {
-                                Text("What are you adding?")
+                                Text("What kind of inspiration?")
                                     .font(NoorFont.title)
                                     .foregroundStyle(.white)
-
-                                Text("A board, post, destination, or action step.")
-                                    .font(NoorFont.bodyLarge)
-                                    .foregroundStyle(Color.noorTextSecondary)
                             }
-                            .padding(.bottom, 24)
+                            .padding(.bottom, 16)
 
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                                 ForEach(VisionItemKind.allCases, id: \.self) { k in
@@ -577,7 +825,7 @@ private struct AddVisionItemSheet: View {
                                 } label: {
                                     Image(systemName: "arrow.right.circle.fill")
                                         .font(.system(size: 52))
-                                        .foregroundStyle(Color.noorRoseGold)
+                                        .foregroundStyle(Color.noorOrange)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -594,7 +842,7 @@ private struct AddVisionItemSheet: View {
                             VStack(alignment: .leading, spacing: 16) {
                                 if kind == .pinterest {
                                     VStack(alignment: .leading, spacing: 10) {
-                                        Text("Board or pin link")
+                                        Text("Paste your Pinterest link")
                                             .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                         TextField("pinterest.com/... or pin.it/...", text: $url)
@@ -607,7 +855,7 @@ private struct AddVisionItemSheet: View {
                                             .autocapitalization(.none)
                                             .keyboardType(.URL)
 
-                                        TextField("Label (optional)", text: $title)
+                                        TextField("Give it a name, e.g. \"Dream kitchen\"", text: $title)
                                             .textFieldStyle(.plain)
                                             .font(NoorFont.body)
                                             .foregroundStyle(.white)
@@ -615,7 +863,7 @@ private struct AddVisionItemSheet: View {
                                             .background(Color.white.opacity(0.1))
                                             .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                                        Text("We'll open this board when you tap it from your vision.")
+                                        Text("Keep your inspiration one tap away. Noor connects it to your goals.")
                                             .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                     }
@@ -623,7 +871,7 @@ private struct AddVisionItemSheet: View {
 
                                 if kind == .instagram {
                                     VStack(alignment: .leading, spacing: 10) {
-                                        Text("Post or profile link")
+                                        Text("Paste the Instagram link")
                                             .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                         TextField("instagram.com/p/... or @handle", text: $url)
@@ -636,7 +884,7 @@ private struct AddVisionItemSheet: View {
                                             .autocapitalization(.none)
                                             .keyboardType(.URL)
 
-                                        TextField("Label (optional)", text: $title)
+                                        TextField("Give it a name, e.g. \"Solo travel inspo\"", text: $title)
                                             .textFieldStyle(.plain)
                                             .font(NoorFont.body)
                                             .foregroundStyle(.white)
@@ -644,7 +892,7 @@ private struct AddVisionItemSheet: View {
                                             .background(Color.white.opacity(0.1))
                                             .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                                        Text("We'll open this post when you tap it from your vision.")
+                                        Text("Save posts that represent the future you're building.")
                                             .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                     }
@@ -652,10 +900,10 @@ private struct AddVisionItemSheet: View {
 
                                 if kind == .destination {
                                     VStack(alignment: .leading, spacing: 10) {
-                                        Text("City or country")
+                                        Text("Where do you want to go?")
                                             .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
-                                        TextField("e.g. Iceland, Tokyo, Bali", text: $placeName)
+                                        TextField("e.g. Iceland, Tokyo, Amalfi Coast", text: $placeName)
                                             .textFieldStyle(.plain)
                                             .font(NoorFont.body)
                                             .foregroundStyle(.white)
@@ -663,7 +911,7 @@ private struct AddVisionItemSheet: View {
                                             .background(Color.white.opacity(0.1))
                                             .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                                        TextField("Label (optional)", text: $title)
+                                        TextField("What this trip means to you (optional)", text: $title)
                                             .textFieldStyle(.plain)
                                             .font(NoorFont.body)
                                             .foregroundStyle(.white)
@@ -671,7 +919,7 @@ private struct AddVisionItemSheet: View {
                                             .background(Color.white.opacity(0.1))
                                             .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                                        Text("We'll help you search flights when you're ready to book.")
+                                        Text("When you're ready, Noor helps you search flights and take the leap.")
                                             .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                     }
@@ -680,7 +928,7 @@ private struct AddVisionItemSheet: View {
                                 if kind == .action {
                                     VStack(alignment: .leading, spacing: 10) {
                                         VStack(alignment: .leading, spacing: 8) {
-                                            Text("Common actions (optional)")
+                                            Text("Need ideas? Pick one to start.")
                                                 .font(NoorFont.bodyLarge)
                                                 .foregroundStyle(Color.noorTextSecondary)
                                             Picker("Idea", selection: $actionSuggestion) {
@@ -698,10 +946,10 @@ private struct AddVisionItemSheet: View {
                                             }
                                         }
 
-                                        Text("Name your next step")
+                                        Text("What's the action?")
                                             .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
-                                        TextField("e.g. Update LinkedIn, DM Sarah", text: $title)
+                                        TextField("e.g. Update LinkedIn, message Sarah, open a savings account", text: $title)
                                             .textFieldStyle(.plain)
                                             .font(NoorFont.body)
                                             .foregroundStyle(.white)
@@ -709,7 +957,7 @@ private struct AddVisionItemSheet: View {
                                             .background(Color.white.opacity(0.1))
                                             .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                                        Text("Link to open (booking page, profile, purchase)")
+                                        Text("Link (optional)")
                                             .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                         TextField("https://...", text: $url)
@@ -722,7 +970,7 @@ private struct AddVisionItemSheet: View {
                                             .autocapitalization(.none)
                                             .keyboardType(.URL)
 
-                                        Text("We'll open this link when you tap it from your vision.")
+                                        Text("One concrete step that moves you closer. Noor will remind you to act on it.")
                                             .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                     }
@@ -731,10 +979,10 @@ private struct AddVisionItemSheet: View {
                                 // Link to journey (if goals exist)
                                 if !goals.isEmpty {
                                     VStack(alignment: .leading, spacing: 10) {
-                                        Text("Link to journey (optional)")
+                                        Text("Connect to a destination")
                                             .font(NoorFont.title)
                                             .foregroundStyle(.white)
-                                        Text("Connect this to one of your visions or goals.")
+                                        Text("Link this to a goal so Noor can guide your actions.")
                                             .font(NoorFont.bodyLarge)
                                             .foregroundStyle(Color.noorTextSecondary)
                                         Picker("Journey", selection: $selectedGoalID) {
@@ -755,7 +1003,7 @@ private struct AddVisionItemSheet: View {
                                     HStack(spacing: 10) {
                                         Image(systemName: "plus.circle.fill")
                                             .font(.system(size: 20))
-                                        Text("Save to vision")
+                                        Text("Add to my vision")
                                             .font(NoorFont.button)
                                     }
                                     .foregroundStyle(.white)
@@ -763,7 +1011,7 @@ private struct AddVisionItemSheet: View {
                                     .frame(height: 56)
                                     .background(
                                         canSave
-                                            ? Color.noorRoseGold
+                                            ? Color.noorOrange
                                             : Color.white.opacity(0.15)
                                     )
                                     .clipShape(RoundedRectangle(cornerRadius: NoorLayout.cornerRadiusLarge))
@@ -787,6 +1035,233 @@ private struct AddVisionItemSheet: View {
     }
 }
 
+// MARK: - Edit Vision Item Sheet
+private struct EditVisionItemSheet: View {
+    let item: VisionItem
+    let goals: [Goal]
+    let onDismiss: () -> Void
+    let onSaved: () -> Void
+
+    @State private var kind: VisionItemKind
+    @State private var title: String
+    @State private var url: String
+    @State private var placeName: String
+    @State private var selectedGoalID: String?
+    @State private var isSaving = false
+
+    init(item: VisionItem, goals: [Goal], onDismiss: @escaping () -> Void, onSaved: @escaping () -> Void) {
+        self.item = item
+        self.goals = goals
+        self.onDismiss = onDismiss
+        self.onSaved = onSaved
+        _kind = State(initialValue: item.kind)
+        _title = State(initialValue: item.title)
+        _url = State(initialValue: item.url ?? "")
+        _placeName = State(initialValue: item.placeName ?? "")
+        _selectedGoalID = State(initialValue: item.goalID)
+    }
+
+    private var canSave: Bool {
+        let t = title.trimmingCharacters(in: .whitespaces)
+        switch kind {
+        case .pinterest, .instagram:
+            let u = url.trimmingCharacters(in: .whitespaces)
+            return !u.isEmpty
+        case .destination:
+            let p = placeName.trimmingCharacters(in: .whitespaces)
+            return !t.isEmpty || !p.isEmpty
+        case .action:
+            return !t.isEmpty
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.noorBackground.ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        Text("Edit vision item")
+                            .font(NoorFont.largeTitle)
+                            .foregroundStyle(.white)
+                            .padding(.top, 8)
+                        
+                        // Type (read-only or allow change)
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Type")
+                                .font(NoorFont.title2)
+                                .foregroundStyle(.white)
+                            HStack(spacing: 10) {
+                                Image(systemName: kind.icon)
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(Color.noorOrange)
+                                Text(kind.displayName)
+                                    .font(NoorFont.body)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                        
+                        switch kind {
+                        case .pinterest, .instagram:
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Title")
+                                    .font(NoorFont.callout)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                                TextField("Name", text: $title)
+                                    .font(NoorFont.body)
+                                    .foregroundStyle(.white)
+                                    .padding(14)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .tint(Color.noorOrange)
+                            }
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Link")
+                                    .font(NoorFont.callout)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                                TextField("URL", text: $url)
+                                    .font(NoorFont.body)
+                                    .foregroundStyle(.white)
+                                    .keyboardType(.URL)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .padding(14)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .tint(Color.noorOrange)
+                            }
+                        case .destination:
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Place name")
+                                    .font(NoorFont.callout)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                                TextField("Where do you want to go?", text: $placeName)
+                                    .font(NoorFont.body)
+                                    .foregroundStyle(.white)
+                                    .padding(14)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .tint(Color.noorOrange)
+                            }
+                            .onChange(of: placeName) { _, new in
+                                if title.isEmpty { title = new }
+                            }
+                        case .action:
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Action step")
+                                    .font(NoorFont.callout)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                                TextField("What action?", text: $title)
+                                    .font(NoorFont.body)
+                                    .foregroundStyle(.white)
+                                    .padding(14)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .tint(Color.noorOrange)
+                            }
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Link (optional)")
+                                    .font(NoorFont.callout)
+                                    .foregroundStyle(Color.noorTextSecondary)
+                                TextField("URL", text: $url)
+                                    .font(NoorFont.body)
+                                    .foregroundStyle(.white)
+                                    .keyboardType(.URL)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .padding(14)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .tint(Color.noorOrange)
+                            }
+                        }
+                        
+                        if !goals.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Link to journey")
+                                    .font(NoorFont.title2)
+                                    .foregroundStyle(.white)
+                                Picker("Journey", selection: $selectedGoalID) {
+                                    Text("None").tag(nil as String?)
+                                    ForEach(goals, id: \.id) { g in
+                                        Text(g.destination.isEmpty ? g.title : g.destination).lineLimit(1)
+                                            .tag(g.id.uuidString as String?)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .tint(.white)
+                            }
+                        }
+                        
+                        Spacer(minLength: 40)
+                    }
+                    .padding(.horizontal, 20)
+                }
+                .scrollDismissesKeyboard(.interactively)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        onDismiss()
+                    }
+                    .foregroundStyle(Color.noorTextSecondary)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Save") {
+                        save()
+                    }
+                    .fontWeight(.semibold)
+                    .foregroundStyle(canSave ? Color.noorOrange : Color.noorTextSecondary)
+                    .disabled(!canSave || isSaving)
+                }
+            }
+        }
+    }
+
+    private func save() {
+        guard canSave, !isSaving else { return }
+        isSaving = true
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        
+        let t = title.trimmingCharacters(in: .whitespaces)
+        let u = url.trimmingCharacters(in: .whitespaces)
+        let p = placeName.trimmingCharacters(in: .whitespaces)
+        
+        var updated: VisionItem
+        switch kind {
+        case .pinterest:
+            updated = VisionItem(id: item.id, kind: .pinterest, title: t.isEmpty ? (URL(string: u)?.host ?? "Pinterest") : t, url: u, goalID: selectedGoalID, completedAt: item.completedAt)
+        case .instagram:
+            updated = VisionItem(id: item.id, kind: .instagram, title: t.isEmpty ? "Instagram" : t, url: u, goalID: selectedGoalID, completedAt: item.completedAt)
+        case .destination:
+            let name = !p.isEmpty ? p : (t.isEmpty ? "Destination" : t)
+            updated = VisionItem(id: item.id, kind: .destination, title: name, placeName: name, goalID: selectedGoalID, completedAt: item.completedAt)
+        case .action:
+            updated = VisionItem(id: item.id, kind: .action, title: t.isEmpty ? "Action" : t, url: u.isEmpty ? nil : u, goalID: selectedGoalID, completedAt: item.completedAt)
+        }
+        
+        var list: [VisionItem] = []
+        if let data = UserDefaults.standard.data(forKey: StorageKey.visionItems),
+           let decoded = try? JSONDecoder().decode([VisionItem].self, from: data) {
+            list = decoded
+        }
+        if let idx = list.firstIndex(where: { $0.id == item.id }) {
+            list[idx] = updated
+            if let data = try? JSONEncoder().encode(list) {
+                UserDefaults.standard.set(data, forKey: StorageKey.visionItems)
+            }
+        }
+        isSaving = false
+        onSaved()
+    }
+}
+
 // MARK: - Vision type cell (icon + label, selected state) — fixed size so all cells match
 private struct VisionKindCell: View {
     let kind: VisionItemKind
@@ -798,14 +1273,14 @@ private struct VisionKindCell: View {
             VStack(spacing: 8) {
                 Image(systemName: kind.icon)
                     .font(.system(size: 28))
-                    .foregroundStyle(isSelected ? Color.noorRoseGold : Color.noorTextSecondary)
+                    .foregroundStyle(isSelected ? Color.noorOrange : Color.noorTextSecondary)
                     .frame(width: 48, height: 48)
-                    .background(isSelected ? Color.noorRoseGold.opacity(0.2) : Color.white.opacity(0.06))
+                    .background(isSelected ? Color.noorOrange.opacity(0.2) : Color.white.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
 
                 Text(kind.displayName)
-                    .font(.system(size: 12, weight: .medium, design: .serif))
-                    .foregroundStyle(isSelected ? Color.noorRoseGold : Color.noorTextSecondary)
+                    .font(NoorFont.caption)
+                    .foregroundStyle(isSelected ? Color.noorOrange : Color.noorTextSecondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -813,11 +1288,11 @@ private struct VisionKindCell: View {
             .frame(maxWidth: .infinity, minHeight: 96)
             .padding(.vertical, 14)
             .padding(.horizontal, 8)
-            .background(isSelected ? Color.noorRoseGold.opacity(0.15) : Color.white.opacity(0.06))
+            .background(isSelected ? Color.noorOrange.opacity(0.15) : Color.white.opacity(0.06))
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(isSelected ? Color.noorRoseGold : Color.white.opacity(0.1), lineWidth: isSelected ? 2 : 1)
+                    .stroke(isSelected ? Color.noorOrange : Color.white.opacity(0.1), lineWidth: isSelected ? 2 : 1)
             )
         }
         .buttonStyle(.plain)
@@ -878,7 +1353,7 @@ struct VisionScienceLessonCard: View {
                     HStack {
                         Text(lesson.tag)
                             .font(NoorFont.caption)
-                            .foregroundStyle(Color.noorRoseGold.opacity(0.9))
+                            .foregroundStyle(Color.noorOrange.opacity(0.9))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
                             .background(Color.white.opacity(0.15))
@@ -938,7 +1413,7 @@ struct VisionScienceLessonSheetContent: View {
                     HStack(spacing: 8) {
                         Image(systemName: "eye.fill")
                             .font(.system(size: 18))
-                            .foregroundStyle(Color.noorRoseGold)
+                            .foregroundStyle(Color.noorOrange)
                         Text("Science of visualization")
                             .font(NoorFont.title)
                             .foregroundStyle(.white)
@@ -966,7 +1441,7 @@ struct VisionScienceLessonSheetContent: View {
                             HStack {
                                 Text(lesson.tag)
                                     .font(NoorFont.caption)
-                                    .foregroundStyle(Color.noorRoseGold.opacity(0.9))
+                                    .foregroundStyle(Color.noorOrange.opacity(0.9))
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 5)
                                     .background(Color.white.opacity(0.15))

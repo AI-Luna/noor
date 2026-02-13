@@ -47,6 +47,7 @@ struct OnboardingView: View {
     @State private var destination: String = ""
     @State private var timeline: String = ""
     @State private var userStory: String = ""
+    @State private var departure: String = ""
     @State private var userName: String = ""
     @State private var userGender: UserProfile.Gender = .woman
     @State private var generatedChallenges: [AIChallenge] = []
@@ -54,6 +55,8 @@ struct OnboardingView: View {
     @State private var isGenerating: Bool = false
     @State private var showPaywall: Bool = false
     @State private var visibleChallengeCount: Int = 0
+    @State private var showItineraryHeader: Bool = false
+    @State private var showItineraryChallenges: Bool = false
     
     // Splash animation states
     @State private var starOffset: CGSize = CGSize(width: -200, height: -300)
@@ -63,10 +66,13 @@ struct OnboardingView: View {
     @State private var starIsWhite: Bool = false
     @State private var showDarkOverlay: Bool = false
     @State private var darkOverlayOffset: CGFloat = -2000
+    @State private var showNoorText: Bool = false
+    @State private var showSplashContinue: Bool = false
 
     @Environment(PurchaseManager.self) private var purchaseManager
     
-    // Intro pages data (swipeable carousel)
+    // Intro pages data (swipeable carousel) - "Show, don't tell" with app mockups
+    // Pages with mockupType will render visual examples from the app
     private let introPages: [IntroPage] = [
         IntroPage(
             id: 0,
@@ -81,76 +87,73 @@ struct OnboardingView: View {
             ],
             quote: OnboardingQuotes.welcome
         ),
+        // Page 1: Travel Agency - shows boarding pass mockup
         IntroPage(
             id: 1,
-            icon: "airplane.departure",
+            icon: nil,
             iconPair: nil,
             accentColor: .noorAccent,
             headline: "Think of us as your travel agency.",
-            subheadline: "Not just for trips. For your entire life.",
+            subheadline: nil,
             body: [
-                "We don't help you dream.",
-                "We book your flights.",
-                "Career. Freedom. Adventures. The relationship. The salary.",
-                "You've already lived it in your mind. Now we're making it real."
+                "You pick the destination.",
+                "We plan the route."
             ],
-            quote: OnboardingQuotes.travel
+            quote: nil
         ),
+        // Page 2: Brain prioritizes - shows notification mockup
         IntroPage(
             id: 2,
             icon: nil,
-            iconPair: ("brain.head.profile", "eye"),
+            iconPair: nil,
             accentColor: .noorViolet,
             headline: "Your brain prioritizes what it sees repeatedly.",
             subheadline: nil,
             body: [
-                "Your Reticular Activating System filters millions of inputs.",
-                "What you see daily becomes what your brain seeks.",
-                "Clear visual goals help your brain filter for opportunities that match your future."
+                "We keep your goals visible so your brain stays focused."
             ],
-            quote: OnboardingQuotes.attention
+            quote: nil
         ),
+        // Page 3: Dopamine - shows task completion mockup
         IntroPage(
             id: 3,
-            icon: "point.3.connected.trianglepath.dotted",
+            icon: nil,
             iconPair: nil,
             accentColor: .noorSuccess,
-            headline: "Small, consistent actions rewire your brain.",
-            subheadline: "Neuroplasticity in action.",
+            headline: "Completed tasks release dopamine.",
+            subheadline: nil,
             body: [
-                "Every micro-action you complete strengthens the pathway.",
-                "Not through willpower. Through repetition.",
-                "One small step daily builds the person who lives that life."
+                "Every checkmark signals progress. Your brain craves the next win."
             ],
-            quote: OnboardingQuotes.neuroplasticity
+            quote: nil
         ),
+        // Page 4: Vision feature - reduce friction to take action
         IntroPage(
             id: 4,
-            icon: "bolt.fill",
+            icon: nil,
             iconPair: nil,
             accentColor: .noorOrange,
-            headline: "Completed tasks release dopamine.",
-            subheadline: "Reinforcing motivation and focus.",
+            headline: "Reduce friction. Take action instantly.",
+            subheadline: nil,
             body: [
-                "The brain repeats behaviors that feel rewarding.",
-                "Small wins build momentum.",
-                "We celebrate every step because your brain needs the signal."
+                "Your vision board lives inside each journey.",
+                "Pin a Pinterest board, save an Instagram profile, book a flight. Open any of them in one tap."
             ],
-            quote: OnboardingQuotes.dopamine
+            quote: nil
         ),
+        // Page 5: Passport - real vacation tracking
         IntroPage(
             id: 5,
-            icon: "crown.fill",
+            icon: nil,
             iconPair: nil,
-            accentColor: .noorAccent,
-            headline: "Every completed goal is evidence.",
-            subheadline: "Of the person you're becoming.",
+            accentColor: .noorViolet,
+            headline: "Your Noor Passport.",
+            subheadline: nil,
             body: [
-                "You're not trying to become her.",
-                "You're already her.",
-                "These micro-actions are just proof. Progress builds identity."
+                "Beyond your dream life, keep tabs on the real places you\u{2019}ve traveled.",
+                "Pin every vacation. Watch your world fill up."
             ],
-            quote: OnboardingQuotes.identity
+            quote: OnboardingQuotes.travel
         )
     ]
 
@@ -167,11 +170,18 @@ struct OnboardingView: View {
                 case 4: scienceAfterDestinationScreen
                 case 5: OnboardingDestinationInputView(destination: $destination, selectedCategory: selectedCategory, onNext: { hapticLight(); advanceScreen() })
                 case 6: OnboardingTimelineInputView(timeline: $timeline, onNext: { hapticLight(); advanceScreen() })
-                case 7: OnboardingStoryInputView(userStory: $userStory, destination: destination, selectedCategory: selectedCategory, onNext: { hapticMedium(); advanceScreen(); generateItinerary() })
-                case 8: aiGenerationScreen
-                case 9: itineraryRevealScreen
-                case 10: OnboardingNameInputView(userName: $userName, onNext: { hapticLight(); advanceScreen() })
-                case 11: genderSelectionScreen
+                case 7: OnboardingStoryInputView(userStory: $userStory, destination: destination, selectedCategory: selectedCategory, onNext: { hapticMedium(); advanceScreen() })
+                case 8: OnboardingDepartureInputView(departure: $departure, onNext: { hapticLight(); advanceScreen() })
+                case 9: OnboardingNameInputView(userName: $userName, onNext: {
+                    hapticLight()
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        advanceScreen()
+                        generateItinerary()
+                    }
+                })
+                case 10: aiGenerationScreen
+                case 11: itineraryRevealScreen
                 case 12: paywallScreen
                 default: splashScreen
                 }
@@ -185,7 +195,7 @@ struct OnboardingView: View {
         .animation(.easeInOut(duration: 0.35), value: currentScreen)
     }
 
-    // MARK: - Screen 1: Splash with Shooting Star
+    // MARK: - Screen 1: Splash with Shooting Star + "Noor" fade-in
     private var splashScreen: some View {
         ZStack {
             // Background - starts white, transitions to dark
@@ -193,20 +203,50 @@ struct OnboardingView: View {
                 .ignoresSafeArea()
                 .animation(.easeInOut(duration: 0.4), value: backgroundIsDark)
             
-            // Shooting star
-            Image(systemName: "sparkle")
-                .font(.system(size: 60, weight: .medium))
-                .foregroundStyle(starIsWhite ? Color.white : Color.noorBackground)
-                .scaleEffect(starScale)
-                .rotationEffect(.degrees(starRotation))
-                .offset(starOffset)
-                .animation(.easeInOut(duration: 0.4), value: starIsWhite)
+            // The star flies in to the center, then "Noor" fades in beside it
+            // Using fixed layout so the star stays in place when text appears
+            HStack(spacing: 8) {
+                Image(systemName: "sparkle")
+                    .font(.system(size: 22))
+                    .foregroundStyle(starIsWhite ? Color.white : Color.noorBackground)
+                    .scaleEffect(starScale)
+                    .rotationEffect(.degrees(starRotation))
+                    .animation(.easeInOut(duration: 0.4), value: starIsWhite)
+                
+                // "Noor" text fades in after star settles
+                Text("Noor")
+                    .font(.system(size: 28, weight: .regular, design: .serif))
+                    .foregroundStyle(.white)
+                    .opacity(showNoorText ? 1 : 0)
+                    .animation(.easeIn(duration: 0.6), value: showNoorText)
+            }
+            // Entire HStack is offset initially, then animates to center
+            .offset(starOffset)
             
-            // Dark overlay that slides down (for transition to next screen)
-            if showDarkOverlay {
-                Color.noorBackground
-                    .ignoresSafeArea()
-                    .offset(y: darkOverlayOffset)
+            // Continue button + page dots at bottom (appear after "Noor" shows)
+            VStack {
+                Spacer()
+                
+                if showSplashContinue {
+                    Button {
+                        hapticLight()
+                        introPage = 1
+                        withAnimation(.easeInOut(duration: 0.5)) {
+                            currentScreen = 2
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("Continue")
+                                .font(NoorFont.onboardingBodyLarge)
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                        .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 40)
+                    .transition(.opacity)
+                }
             }
         }
         .onAppear {
@@ -215,15 +255,29 @@ struct OnboardingView: View {
     }
     
     private func startSplashAnimation() {
-        hapticMedium()
-        
+        showNoorText = false
+        showSplashContinue = false
+
         // Phase 1: Star flies in like a shooting star (0 - 0.8s)
+        // Cascading haptics during flight
+        hapticStrong() // Initial launch
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { hapticMedium() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { hapticMedium() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { hapticLight() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { hapticLight() }
+
         withAnimation(.easeOut(duration: 0.8)) {
             starOffset = .zero
             starScale = 1.0
             starRotation = 0
         }
-        
+
+        // Star lands — satisfying thud
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            hapticStrong()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { hapticMedium() }
+        }
+
         // Phase 2: Background goes dark, star turns white (0.8s - 1.2s)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             hapticLight()
@@ -232,60 +286,72 @@ struct OnboardingView: View {
                 starIsWhite = true
             }
         }
-        
-        // Phase 3: Transition to Welcome screen (1.6s)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
-            currentScreen = 2
+
+        // Phase 3: "Noor" text fades in beside star (1.5s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            withAnimation(.easeIn(duration: 0.6)) {
+                showNoorText = true
+            }
+        }
+
+        // Phase 4: Show Continue button (2.3s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+            withAnimation(.easeOut(duration: 0.4)) {
+                showSplashContinue = true
+            }
         }
     }
     
-    // MARK: - Screen 2: Swipeable Intro Carousel
+    // MARK: - Screen 2: Swipeable Intro Carousel (Noor shown in splash, starts at page 1)
     private var swipeableIntroScreen: some View {
         VStack(spacing: 0) {
             TabView(selection: $introPage) {
-                // First page is special with typewriter animation
+                // Page 1: Built on motivation / behavioral science (Noor was already shown in splash)
                 TypewriterIntroPageView(onContinue: {
-                    withAnimation { introPage = 1 }
+                    withAnimation(.easeInOut(duration: 0.5)) { introPage = 2 }
                 })
-                .tag(0)
+                .tag(1)
+                .transition(.opacity)
                 
-                // Rest of pages (starting from index 1)
-                ForEach(introPages.dropFirst()) { page in
+                // Rest of pages (indices 2–5)
+                ForEach(Array(introPages.dropFirst().enumerated()), id: \.element.id) { offset, page in
                     IntroPageView(page: page)
-                        .tag(page.id)
+                        .tag(offset + 2)
+                        .transition(.opacity)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .animation(.easeInOut(duration: 0.3), value: introPage)
+            .animation(.easeInOut(duration: 0.5), value: introPage)
             
-            // Bottom controls (only show after first page)
-            if introPage > 0 {
+            // Bottom controls — only show from "Travel Agency" page onwards (page 2+)
+            if introPage >= 2 {
+                let lastPage = introPages.count // final tag = 6
                 VStack(spacing: 20) {
-                    // Page indicator (hide on final page)
-                    if introPage < introPages.count - 1 {
+                    // Page indicator dots (hide on final page)
+                    if introPage < lastPage {
                         HStack(spacing: 8) {
-                            ForEach(0..<introPages.count, id: \.self) { index in
+                            ForEach(2...lastPage, id: \.self) { index in
                                 Capsule()
-                                    .fill(index == introPage ? Color.noorAccent : Color.white.opacity(0.3))
+                                    .fill(index == introPage ? Color.white : Color.white.opacity(0.3))
                                     .frame(width: index == introPage ? 24 : 8, height: 8)
                                     .animation(.spring(response: 0.3, dampingFraction: 0.7), value: introPage)
                             }
                         }
                     }
 
-                    // Continue button - brighter on final screen
                     Button {
                         hapticLight()
-                        if introPage < introPages.count - 1 {
-                            withAnimation { introPage += 1 }
+                        if introPage < lastPage {
+                            withAnimation(.easeInOut(duration: 0.5)) { introPage += 1 }
                         } else {
-                            // Request notification permission before proceeding
                             requestNotificationPermission()
-                            currentScreen = 3
+                            withAnimation(.easeInOut(duration: 0.5)) {
+                                currentScreen = 3
+                            }
                         }
                     } label: {
-                        if introPage == introPages.count - 1 {
-                            // Get Started - prominent button
+                        if introPage == lastPage {
                             HStack(spacing: 8) {
                                 Text("Get Started")
                                     .font(NoorFont.button)
@@ -299,21 +365,20 @@ struct OnboardingView: View {
                             .clipShape(Capsule())
                             .shadow(color: Color.noorAccent.opacity(0.6), radius: 20, x: 0, y: 4)
                         } else {
-                            // Continue - subtle text link
                             HStack(spacing: 6) {
                                 Text("Continue")
-                                    .font(NoorFont.bodyLarge)
+                                    .font(NoorFont.onboardingBodyLarge)
                                 Image(systemName: "arrow.right")
                                     .font(.system(size: 14, weight: .medium))
                             }
-                            .foregroundStyle(Color.noorAccent)
+                            .foregroundStyle(.white)
                         }
                     }
                     .buttonStyle(.plain)
                     .animation(.easeInOut(duration: 0.3), value: introPage)
                 }
                 .padding(.bottom, 40)
-                .transition(.opacity)
+                .transition(.opacity.animation(.easeInOut(duration: 0.4)))
             }
         }
     }
@@ -329,7 +394,7 @@ struct OnboardingView: View {
                     .foregroundStyle(.white)
 
                 Text("Where are you traveling first?")
-                    .font(NoorFont.bodyLarge)
+                    .font(NoorFont.onboardingBodyLarge)
                     .foregroundStyle(Color.noorTextSecondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -388,7 +453,7 @@ struct OnboardingView: View {
                         .foregroundStyle(Color.noorTextSecondary)
 
                     Text(OnboardingQuotes.writing)
-                        .font(NoorFont.body)
+                        .font(NoorFont.onboardingBody)
                         .italic()
                         .foregroundStyle(Color.noorRoseGold)
                         .padding(.top, 8)
@@ -407,59 +472,127 @@ struct OnboardingView: View {
         .padding(.horizontal, NoorLayout.horizontalPadding)
     }
 
-    // MARK: - Screen 8: AI Generation Loading
+    // MARK: - Screen 8: AI Generation Loading (Personalized, flight-details vibe)
+    @State private var loadingPhraseIndex: Int = 0
+    @State private var loadingPhraseOpacity: Double = 0
+    @State private var loadingCircleRotation: Double = 0
+
+    private var loadingPhrases: [String] {
+        var phrases: [String] = ["Personalizing your journey..."]
+        if !destination.isEmpty {
+            phrases.append("Destination: \(destination)")
+        }
+        if !timeline.isEmpty {
+            phrases.append("Arrival: \(timeline)")
+        }
+        if !userStory.isEmpty {
+            let excerpt = String(userStory.prefix(50))
+            phrases.append("Your vision: \(excerpt)\(userStory.count > 50 ? "..." : "")")
+        }
+        if let cat = selectedCategory, !destination.isEmpty {
+            phrases.append("Mapping your \(cat.shortName) route to \(destination)")
+        } else if !destination.isEmpty {
+            phrases.append("Mapping your route to \(destination)")
+        }
+        if !departure.isEmpty {
+            phrases.append("From \(departure) to \(destination.isEmpty ? "your goal" : destination)")
+        }
+        if !userName.isEmpty {
+            phrases.append("Crafting steps for \(userName)")
+        }
+        phrases.append("Analyzing your goals...")
+        phrases.append("Building your boarding pass...")
+        phrases.append("Preparing for takeoff...")
+        return phrases
+    }
+
     private var aiGenerationScreen: some View {
-        VStack(spacing: 40) {
+        VStack(spacing: 0) {
             Spacer()
 
+            // Personalized loading text above the circle — slow fade for each phrase
+            VStack(spacing: 16) {
+                Text("Loading your flight details")
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.5))
+                    .tracking(1.5)
+
+                Text(loadingPhrases[min(loadingPhraseIndex, loadingPhrases.count - 1)])
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(3)
+                    .frame(minHeight: 54)
+                    .opacity(loadingPhraseOpacity)
+                    .id(loadingPhraseIndex)
+            }
+            .padding(.horizontal, 32)
+            .padding(.bottom, 48)
+
+            // Large centered loading circle
             ZStack {
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.white.opacity(0.1))
-                    .frame(width: 280, height: 160)
+                Circle()
+                    .stroke(Color.white.opacity(0.12), lineWidth: 4)
+                    .frame(width: 120, height: 120)
 
-                VStack(spacing: 12) {
-                    Image(systemName: "ticket.fill")
-                        .font(.system(size: 40))
-                        .foregroundStyle(Color.noorRoseGold)
-                        .rotationEffect(.degrees(-15))
+                Circle()
+                    .trim(from: 0, to: 0.25)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.noorAccent, Color.noorAccent.opacity(0.6)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
+                        style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                    )
+                    .frame(width: 120, height: 120)
+                    .rotationEffect(.degrees(loadingCircleRotation))
 
-                    HStack(spacing: 8) {
-                        ForEach(0..<3, id: \.self) { i in
-                            Circle()
-                                .fill(Color.noorAccent)
-                                .frame(width: 8, height: 8)
-                                .opacity(isGenerating ? 1 : 0.3)
-                                .animation(
-                                    .easeInOut(duration: 0.5)
-                                    .repeatForever()
-                                    .delay(Double(i) * 0.2),
-                                    value: isGenerating
-                                )
+                Image(systemName: "airplane")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(Color.noorAccent.opacity(0.9))
+            }
+            .frame(width: 120, height: 120)
+
+            Spacer()
+
+            // Bottom hint
+            Text("Your itinerary is almost ready")
+                .font(NoorFont.onboardingCaption)
+                .foregroundStyle(Color.noorTextSecondary.opacity(0.7))
+                .padding(.bottom, 48)
+        }
+        .onAppear {
+            isGenerating = true
+            loadingPhraseIndex = 0
+            loadingPhraseOpacity = 0
+
+            // Slow fade-in for first phrase
+            withAnimation(.easeIn(duration: 1.2)) {
+                loadingPhraseOpacity = 1
+            }
+
+            // Rotate loading arc continuously
+            withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
+                loadingCircleRotation = 360
+            }
+
+            // Cycle through personalized phrases with slow fade
+            let phrases = loadingPhrases
+            for i in 1..<phrases.count {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 2.0) {
+                    guard isGenerating else { return }
+                    withAnimation(.easeOut(duration: 0.4)) {
+                        loadingPhraseOpacity = 0
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                        loadingPhraseIndex = min(i, phrases.count - 1)
+                        withAnimation(.easeIn(duration: 1.0)) {
+                            loadingPhraseOpacity = 1
                         }
                     }
                 }
             }
-
-            VStack(spacing: 16) {
-                Text("Mapping your route...")
-                    .font(NoorFont.title)
-                    .foregroundStyle(.white)
-
-                if !destination.isEmpty {
-                    Text("Destination: \(destination)")
-                        .font(NoorFont.body)
-                        .foregroundStyle(Color.noorTextSecondary)
-                }
-
-                Text("Building your 7-step itinerary")
-                    .font(NoorFont.caption)
-                    .foregroundStyle(Color.noorAccent)
-            }
-
-            Spacer()
-        }
-        .onAppear {
-            isGenerating = true
         }
     }
 
@@ -467,74 +600,144 @@ struct OnboardingView: View {
     private var itineraryRevealScreen: some View {
         VStack(spacing: 0) {
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 24) {
-                    // Header with white flight icon
-                    VStack(spacing: 12) {
-                        Image(systemName: "airplane")
-                            .font(.system(size: 40))
-                            .foregroundStyle(.white)
-                            .rotationEffect(.degrees(-45))
+                VStack(spacing: 20) {
+                    // Boarding pass on top with real user info
+                    VStack(spacing: 0) {
+                        HStack {
+                            Image(systemName: "airplane")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Color(white: 0.3))
+                            Text("BOARDING PASS")
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Color(white: 0.3))
+                                .tracking(2)
+                            Spacer()
+                            Text("NOOR AIRLINES")
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Color(white: 0.45))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color(white: 0.92))
 
-                        VStack(spacing: 4) {
-                            Text("Your Flight to \(destination)")
-                                .font(NoorFont.largeTitle)
-                                .foregroundStyle(.white)
-                                .multilineTextAlignment(.center)
-                            
-                            Text("is now boarding")
-                                .font(NoorFont.title)
-                                .foregroundStyle(Color.noorAccent)
-                        }
+                        HStack(spacing: 0) {
+                            VStack(spacing: 12) {
+                                // Passenger + class
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("PASSENGER")
+                                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                            .foregroundStyle(Color(white: 0.5))
+                                        Text(userName.isEmpty ? "You" : userName.uppercased())
+                                            .font(.system(size: 16, weight: .bold, design: .serif))
+                                            .foregroundStyle(.black)
+                                    }
+                                    Spacer()
+                                    VStack(alignment: .trailing, spacing: 2) {
+                                        Text("CLASS")
+                                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                            .foregroundStyle(Color(white: 0.5))
+                                        Text("First Class")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(.black)
+                                    }
+                                }
 
-                        // Departure: Location → Arrival: Location with colors
-                        HStack(spacing: 8) {
-                            // Departure
-                            HStack(spacing: 4) {
-                                Text("Departure:")
-                                    .font(NoorFont.caption)
-                                    .foregroundStyle(Color.noorTextSecondary)
-                                Text("Now")
-                                    .font(NoorFont.callout)
-                                    .foregroundStyle(Color.noorSuccess)
-                                    .fontWeight(.semibold)
+                                // FROM / TO
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("FROM")
+                                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                            .foregroundStyle(.black.opacity(0.6))
+                                        Text(departure.isEmpty ? "Current You" : departure)
+                                            .font(.system(size: 15, weight: .semibold))
+                                            .foregroundStyle(.black)
+                                    }
+                                    Spacer()
+                                    VStack(alignment: .trailing, spacing: 2) {
+                                        Text("TO")
+                                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                            .foregroundStyle(.black.opacity(0.6))
+                                        Text(destination.isEmpty ? "Your Dream" : destination)
+                                            .font(.system(size: 15, weight: .bold))
+                                            .foregroundStyle(.black)
+                                            .lineLimit(1)
+                                    }
+                                }
+
+                                // Flight path — airplane with progress (hot pink to the left)
+                                HStack(spacing: 8) {
+                                    Circle()
+                                        .fill(Color(white: 0.6))
+                                        .frame(width: 6, height: 6)
+                                    GeometryReader { geo in
+                                        let progressFraction: CGFloat = 0.42
+                                        ZStack(alignment: .leading) {
+                                            Rectangle()
+                                                .fill(Color(white: 0.75))
+                                                .frame(height: 2)
+                                            Rectangle()
+                                                .fill(Color.noorAccent)
+                                                .frame(width: geo.size.width * progressFraction, height: 2)
+                                            Image(systemName: "airplane")
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(Color.noorAccent)
+                                                .offset(x: geo.size.width * progressFraction - 6)
+                                        }
+                                    }
+                                    .frame(height: 14)
+                                    Circle()
+                                        .fill(Color.noorAccent.opacity(0.5))
+                                        .frame(width: 6, height: 6)
+                                }
+
+                                HStack(spacing: 6) {
+                                    Image(systemName: "calendar")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(Color(white: 0.45))
+                                    Text("ETA: February 26, 2026")
+                                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(Color(white: 0.35))
+                                }
                             }
-                            
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(Color.noorTextSecondary)
-                            
-                            // Arrival
-                            HStack(spacing: 4) {
-                                Text("Arrival:")
-                                    .font(NoorFont.caption)
-                                    .foregroundStyle(Color.noorTextSecondary)
-                                Text(timeline.isEmpty ? "Your timeline" : timeline)
-                                    .font(NoorFont.callout)
-                                    .foregroundStyle(Color.noorAccent)
-                                    .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+
+                            // Perforation
+                            VStack(spacing: 3) {
+                                ForEach(0..<8, id: \.self) { _ in
+                                    Circle().fill(Color.noorBackground).frame(width: 3, height: 3)
+                                }
                             }
+                            .padding(.vertical, 6)
+
+                            // Right stub — step count
+                            VStack(spacing: 4) {
+                                Text("\(generatedChallenges.count)")
+                                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.black)
+                                Text("STEPS")
+                                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(Color(white: 0.45))
+                            }
+                            .frame(width: 54)
+                            .padding(.vertical, 10)
                         }
-                        .padding(.top, 8)
-                        
-                        // Subtext - same color as Request New Route
-                        if !boardingPass.isEmpty {
-                            Text(boardingPass)
-                                .font(NoorFont.callout)
-                                .foregroundStyle(Color.noorTextSecondary)
-                                .italic()
-                                .multilineTextAlignment(.center)
-                                .padding(.top, 4)
-                        }
+                        .background(Color.white)
                     }
-                    .padding(.top, 24)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .opacity(showItineraryHeader ? 1 : 0)
+                    .offset(y: showItineraryHeader ? 0 : -10)
+                    .padding(.top, 30)
 
-                    // 7 Steps with fade-in animation
+                    // 7-Step Journey — fades in below the boarding pass
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Your 7-Step Journey")
-                            .font(NoorFont.title2)
+                            .font(NoorFont.title)
                             .foregroundStyle(.white)
                             .padding(.bottom, 4)
-                        
+                            .opacity(showItineraryChallenges ? 1 : 0)
+
                         ForEach(Array(generatedChallenges.enumerated()), id: \.element.id) { index, challenge in
                             ItineraryChallengeRow(
                                 number: index + 1,
@@ -544,10 +747,10 @@ struct OnboardingView: View {
                             )
                             .opacity(index < visibleChallengeCount ? 1 : 0)
                             .offset(y: index < visibleChallengeCount ? 0 : 10)
-                            .animation(.easeOut(duration: 0.4).delay(Double(index) * 0.15), value: visibleChallengeCount)
+                            .animation(.easeOut(duration: 0.35), value: visibleChallengeCount)
                         }
                     }
-                    
+
                     Spacer().frame(height: 20)
                 }
                 .padding(.horizontal, NoorLayout.horizontalPadding)
@@ -555,7 +758,6 @@ struct OnboardingView: View {
 
             // Fixed bottom buttons
             VStack(spacing: 16) {
-                // Big pink button with white text
                 Button {
                     hapticStrong()
                     advanceScreen()
@@ -571,9 +773,7 @@ struct OnboardingView: View {
                 }
                 .buttonStyle(.plain)
 
-                // Faint Request New Route
                 Button {
-                    // Reset to destination input screen so user can try again
                     destination = ""
                     timeline = ""
                     userStory = ""
@@ -585,7 +785,7 @@ struct OnboardingView: View {
                         Image(systemName: "arrow.triangle.2.circlepath")
                         Text("Request New Route")
                     }
-                    .font(NoorFont.caption)
+                    .font(NoorFont.onboardingCaption)
                     .foregroundStyle(Color.noorTextSecondary.opacity(0.7))
                 }
                 .buttonStyle(.plain)
@@ -595,15 +795,38 @@ struct OnboardingView: View {
             .background(Color.noorBackground)
         }
         .onAppear {
-            // Animate challenges fading in one by one
+            showItineraryHeader = false
+            showItineraryChallenges = false
             visibleChallengeCount = 0
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                visibleChallengeCount = generatedChallenges.count
+
+            // Boarding pass fades in with haptic
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            withAnimation(.easeOut(duration: 0.6)) {
+                showItineraryHeader = true
+            }
+
+            // "Your 7-Step Journey" heading fades in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.easeIn(duration: 0.5)) {
+                    showItineraryChallenges = true
+                }
+            }
+
+            // Each challenge row appears one at a time with haptics
+            let challengeCount = generatedChallenges.count
+            for i in 0..<challengeCount {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.3 + Double(i) * 0.25) {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.5)
+                    withAnimation(.easeOut(duration: 0.35)) {
+                        visibleChallengeCount = i + 1
+                    }
+                }
             }
         }
     }
 
-    // MARK: - Screen 10: Gender Selection
+    // MARK: - Removed Gender Selection (default preserved)
     private var genderSelectionScreen: some View {
         VStack(spacing: 0) {
             Spacer()
@@ -682,19 +905,19 @@ struct OnboardingView: View {
                             Button("Restore Purchases") {
                                 restorePurchases()
                             }
-                            .font(NoorFont.callout)
+                            .font(NoorFont.onboardingCallout)
                             .foregroundStyle(Color.noorTextSecondary)
 
                             if let error = purchaseManager.errorMessage {
                                 Text(error)
-                                    .font(NoorFont.caption)
+                                    .font(NoorFont.onboardingCaption)
                                     .foregroundStyle(Color.noorCoral)
                                     .multilineTextAlignment(.center)
                                     .padding(.horizontal)
                             }
 
                             Text("The woman who lives that life invests in herself.")
-                                .font(NoorFont.caption)
+                                .font(NoorFont.onboardingCaption)
                                 .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
                                 .italic()
                                 .padding(.top, 4)
@@ -702,7 +925,7 @@ struct OnboardingView: View {
                             Button("Skip for now") {
                                 saveUserAndComplete()
                             }
-                            .font(NoorFont.caption)
+                            .font(NoorFont.onboardingCaption)
                             .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
                             .padding(.top, 8)
 
@@ -712,7 +935,7 @@ struct OnboardingView: View {
                                         UIApplication.shared.open(url)
                                     }
                                 }
-                                    .font(NoorFont.caption)
+                                    .font(NoorFont.onboardingCaption)
                                     .foregroundStyle(Color.noorTextSecondary.opacity(0.7))
 
                                 Button("Privacy Policy") {
@@ -720,7 +943,7 @@ struct OnboardingView: View {
                                         UIApplication.shared.open(url)
                                     }
                                 }
-                                    .font(NoorFont.caption)
+                                    .font(NoorFont.onboardingCaption)
                                     .foregroundStyle(Color.noorTextSecondary.opacity(0.7))
                             }
                         }
@@ -771,9 +994,9 @@ struct OnboardingView: View {
                     boardingPass = result.encouragement
                 }
                 isGenerating = false
-                if currentScreen == 8 {
+                if currentScreen == 10 {
                     withAnimation(.easeInOut(duration: 0.3)) {
-                        currentScreen = 9
+                        currentScreen = 11
                     }
                 }
             }
@@ -832,6 +1055,7 @@ struct OnboardingView: View {
 
         let firstGoal: [String: Any] = [
             "category": selectedCategory?.rawValue ?? "travel",
+            "departure": departure,
             "destination": destination,
             "timeline": timeline,
             "userStory": userStory,
@@ -878,7 +1102,7 @@ struct OnboardingView: View {
     }
 }
 
-// MARK: - Typewriter Intro Page (First Page with Special Animation)
+// MARK: - Typewriter Intro Page (Built on motivation / behavioral science — no "Noor" on this page)
 private struct TypewriterIntroPageView: View {
     let onContinue: () -> Void
 
@@ -907,9 +1131,7 @@ private struct TypewriterIntroPageView: View {
     @State private var cursorTimer: Timer?
 
     // Content fade states
-    @State private var subtextOpacity: Double = 0
     @State private var buttonOpacity: Double = 0
-    @State private var dotsOpacity: Double = 0
 
     private let fullWelcome = "Welcome to Noor"
     private let builtOnFull = "Built on "
@@ -922,36 +1144,22 @@ private struct TypewriterIntroPageView: View {
                 VStack(spacing: 0) {
                     Spacer()
 
-                    // Main text area - fixed position, no layout shifts
+                    // Main text area — "Built on motivation" -> "behavioral science."
                     VStack(alignment: .leading, spacing: 0) {
                         ZStack(alignment: .topLeading) {
-                            // Phase 0-1: "Welcome to Noor" (same position as built-on text)
-                            HStack(spacing: 0) {
-                                Text(welcomeText)
-                                    .font(NoorFont.hero)
-                                    .foregroundStyle(.white)
-
-                                if showCursor && hasStartedTypewriter && phase < 2 {
-                                    Rectangle()
-                                        .fill(Color.noorAccent)
-                                        .frame(width: 3, height: 40)
-                                }
-                            }
-                            .opacity(phase < 2 ? 1 : 0)
-
-                            // Phase 2+: "Built on motivation" -> strikethrough -> "behavioral science."
+                            // "Built on motivation" -> strikethrough -> "behavioral science."
                             VStack(alignment: .leading, spacing: 6) {
                                 // Line 1: "Built on motivation." with strikethrough
                                 HStack(spacing: 0) {
                                     Text(builtOnText)
-                                        .font(NoorFont.largeTitle)
+                                        .font(.system(size: 32, weight: .regular))
                                         .foregroundStyle(.white)
 
                                     // motivation typed then struck through
                                     if !motivationText.isEmpty {
                                         ZStack(alignment: .leading) {
                                             Text(motivationText)
-                                                .font(NoorFont.largeTitle)
+                                                .font(.system(size: 32, weight: .regular))
                                                 .foregroundStyle(motivationFaded ? Color.noorTextSecondary.opacity(0.4) : .white)
 
                                             // Strikethrough line
@@ -976,9 +1184,8 @@ private struct TypewriterIntroPageView: View {
                                 // Line 2: "behavioral science." typed in after strikethrough
                                 HStack(spacing: 0) {
                                     Text(behavioralScienceText)
-                                        .font(NoorFont.largeTitle)
+                                        .font(.system(size: 32, weight: .regular))
                                         .foregroundStyle(Color.noorAccent)
-                                        .fontWeight(.bold)
 
                                     if showCursor && phase == 5 {
                                         Rectangle()
@@ -988,47 +1195,28 @@ private struct TypewriterIntroPageView: View {
                                 }
                                 .opacity(behavioralScienceText.isEmpty ? 0 : 1)
                             }
-                            .opacity(phase >= 2 ? 1 : 0)
                         }
 
-                        // Subtext - always in layout, opacity controlled
-                        Text("Designed around how your brain builds habits through attention, action, and reward.")
-                            .font(NoorFont.bodyLarge)
-                            .foregroundStyle(Color.noorTextSecondary)
-                            .multilineTextAlignment(.leading)
-                            .opacity(subtextOpacity)
-                            .padding(.top, 16)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, NoorLayout.horizontalPadding)
 
                     Spacer()
 
-                    // Bottom controls
-                    VStack(spacing: 20) {
-                        HStack(spacing: 8) {
-                            ForEach(0..<6, id: \.self) { index in
-                                Capsule()
-                                    .fill(index == 0 ? Color.noorAccent : Color.white.opacity(0.3))
-                                    .frame(width: index == 0 ? 24 : 8, height: 8)
-                            }
+                    // Bottom controls — continue only, no dots on this screen
+                    Button {
+                        onContinue()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("Continue")
+                                .font(NoorFont.onboardingBodyLarge)
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 14, weight: .medium))
                         }
-                        .opacity(dotsOpacity)
-
-                        Button {
-                            onContinue()
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text("Continue")
-                                    .font(NoorFont.bodyLarge)
-                                Image(systemName: "arrow.right")
-                                    .font(.system(size: 14, weight: .medium))
-                            }
-                            .foregroundStyle(Color.noorAccent)
-                        }
-                        .buttonStyle(.plain)
-                        .opacity(buttonOpacity)
+                        .foregroundStyle(.white)
                     }
+                    .buttonStyle(.plain)
+                    .opacity(buttonOpacity)
                     .padding(.bottom, 40)
                 }
                 .mask(
@@ -1052,16 +1240,14 @@ private struct TypewriterIntroPageView: View {
     }
 
     private func startRevealAnimation() {
-        phase = 0
+        phase = 2
         welcomeText = ""
         builtOnText = ""
         motivationText = ""
         strikethroughProgress = 0
         motivationFaded = false
         behavioralScienceText = ""
-        subtextOpacity = 0
         buttonOpacity = 0
-        dotsOpacity = 0
 
         withAnimation(.easeOut(duration: 0.6)) {
             revealProgress = 1.0
@@ -1070,7 +1256,7 @@ private struct TypewriterIntroPageView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
             hasStartedTypewriter = true
             startCursorBlink()
-            typeWelcome()
+            typeBuiltOn()
         }
     }
 
@@ -1128,6 +1314,7 @@ private struct TypewriterIntroPageView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.12) {
                 guard self.phase == 2 else { return }
                 self.builtOnText = String(self.builtOnFull.prefix(index + 1))
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.3)
 
                 if index == self.builtOnFull.count - 1 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -1146,6 +1333,7 @@ private struct TypewriterIntroPageView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.10) {
                 guard self.phase == 3 else { return }
                 self.motivationText = String(self.motivationFull.prefix(index + 1))
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.4)
 
                 if index == self.motivationFull.count - 1 {
                     // Pause, then strikethrough
@@ -1160,6 +1348,12 @@ private struct TypewriterIntroPageView: View {
 
     // Phase 4: Strike through "motivation." — it stays visible, just crossed out and faded
     private func strikethroughMotivation() {
+        // Dramatic strikethrough haptic
+        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        }
+
         withAnimation(.easeInOut(duration: 0.5)) {
             strikethroughProgress = 1.0
         }
@@ -1185,9 +1379,13 @@ private struct TypewriterIntroPageView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.08) {
                 guard self.phase == 5 else { return }
                 self.behavioralScienceText = String(self.behavioralScienceFull.prefix(index + 1))
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.5)
 
                 if index == self.behavioralScienceFull.count - 1 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    // Success haptic when fully typed
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    // Wait before showing continue
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                         self.phase = 6
                         self.showFinalContent()
                     }
@@ -1196,44 +1394,41 @@ private struct TypewriterIntroPageView: View {
         }
     }
 
-    // Phase 6: Show subtext and controls
+    // Phase 6: Show continue button (no "Noor" on this page)
     private func showFinalContent() {
-        withAnimation(.easeOut(duration: 1.8)) {
-            subtextOpacity = 1
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+        // Button appears after a pause
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
             withAnimation(.easeOut(duration: 0.6)) {
-                dotsOpacity = 1
                 buttonOpacity = 1
             }
         }
     }
 }
 
-// MARK: - Intro Page View (for swipeable carousel)
+// MARK: - Intro Page View (for swipeable carousel) - "Show, don't tell" with mockups
 private struct IntroPageView: View {
     let page: IntroPage
     @State private var headlineAppeared = false
     @State private var restAppeared = false
+    @State private var mockupAppeared = false
     
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 24) {
-                Spacer().frame(height: 40)
+            VStack(alignment: .center, spacing: 20) {
+                Spacer().frame(height: 50)
                 
-                // Icon - appears with headline
+                // Icon - only for pages that have one
                 Group {
                     if let icon = page.icon {
                         Image(systemName: icon)
-                            .font(.system(size: 56))
+                            .font(.system(size: 48))
                             .foregroundStyle(page.accentColor)
                     } else if let pair = page.iconPair {
                         HStack(spacing: 16) {
                             Image(systemName: pair.0)
-                                .font(.system(size: 40))
+                                .font(.system(size: 36))
                             Image(systemName: pair.1)
-                                .font(.system(size: 40))
+                                .font(.system(size: 36))
                         }
                         .foregroundStyle(page.accentColor)
                     }
@@ -1245,6 +1440,7 @@ private struct IntroPageView: View {
                 Text(page.headline)
                     .font(NoorFont.largeTitle)
                     .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
                     .opacity(headlineAppeared ? 1 : 0)
                     .offset(y: headlineAppeared ? 0 : 20)
                 
@@ -1253,41 +1449,83 @@ private struct IntroPageView: View {
                     Text(subheadline)
                         .font(NoorFont.title)
                         .foregroundStyle(page.accentColor)
+                        .multilineTextAlignment(.center)
                         .opacity(restAppeared ? 1 : 0)
                         .offset(y: restAppeared ? 0 : 15)
                 }
                 
-                // Divider - fades in with rest
-                Rectangle()
-                    .fill(page.accentColor.opacity(0.5))
-                    .frame(width: 60, height: 2)
-                    .opacity(restAppeared ? 1 : 0)
-                
-                // Body text - fades in slowly, staggered
-                VStack(alignment: .leading, spacing: 14) {
-                    ForEach(Array(page.body.enumerated()), id: \.offset) { index, text in
-                        Text(text)
-                            .font(NoorFont.bodyLarge)
-                            .foregroundStyle(Color.noorTextSecondary)
-                            .opacity(restAppeared ? 1 : 0)
-                            .offset(y: restAppeared ? 0 : 10)
-                            .animation(.easeOut(duration: 0.6).delay(Double(index) * 0.15), value: restAppeared)
+                // Page 4 (Vision): mockup first, then body text under it
+                // Other pages: body text first, then mockup
+                if page.id == 4 {
+                    // Vision: mockup first
+                    Group {
+                        OnboardingVisionMockup()
                     }
+                    .opacity(mockupAppeared ? 1 : 0)
+                    .scaleEffect(mockupAppeared ? 1 : 0.95)
+                    .padding(.top, 8)
+                    
+                    // Body text under vision mockup
+                    VStack(alignment: .center, spacing: 10) {
+                        ForEach(Array(page.body.enumerated()), id: \.offset) { index, text in
+                            Text(text)
+                                .font(.system(size: 20, weight: .regular, design: .serif))
+                                .foregroundStyle(Color.noorTextSecondary)
+                                .multilineTextAlignment(.center)
+                                .opacity(restAppeared ? 1 : 0)
+                                .offset(y: restAppeared ? 0 : 10)
+                                .animation(.easeOut(duration: 0.6).delay(Double(index) * 0.1), value: restAppeared)
+                        }
+                    }
+                    .padding(.top, 16)
+                } else {
+                    // Other pages: body text then mockup
+                    VStack(alignment: .center, spacing: 10) {
+                        ForEach(Array(page.body.enumerated()), id: \.offset) { index, text in
+                            Text(text)
+                                .font(.system(size: 20, weight: .regular, design: .serif))
+                                .foregroundStyle(Color.noorTextSecondary)
+                                .multilineTextAlignment(.center)
+                                .opacity(restAppeared ? 1 : 0)
+                                .offset(y: restAppeared ? 0 : 10)
+                                .animation(.easeOut(duration: 0.6).delay(Double(index) * 0.1), value: restAppeared)
+                        }
+                    }
+                    
+                    Group {
+                        switch page.id {
+                        case 1:
+                            OnboardingBoardingPassMockup()
+                        case 2:
+                            OnboardingNotificationMockup()
+                        case 3:
+                            OnboardingTaskCompletionMockup()
+                        case 5:
+                            OnboardingPassportMockup()
+                        default:
+                            EmptyView()
+                        }
+                    }
+                    .opacity(mockupAppeared ? 1 : 0)
+                    .scaleEffect(mockupAppeared ? 1 : 0.95)
+                    .padding(.top, 8)
                 }
                 
-                // Quote - fades in last
+                // Quote - fades in last (only if present)
                 if let quote = page.quote {
                     Text("\"\(quote)\"")
-                        .font(NoorFont.body)
+                        .font(NoorFont.onboardingBody)
                         .italic()
                         .foregroundStyle(page.accentColor.opacity(0.9))
+                        .multilineTextAlignment(.center)
                         .padding(.top, 8)
                         .opacity(restAppeared ? 1 : 0)
                         .animation(.easeOut(duration: 0.6).delay(0.6), value: restAppeared)
                 }
                 
-                Spacer().frame(height: 120)
+                Spacer().frame(height: 60)
             }
+            .frame(maxWidth: .infinity)
             .padding(.horizontal, NoorLayout.horizontalPadding)
         }
         .onAppear {
@@ -1296,16 +1534,666 @@ private struct IntroPageView: View {
                 headlineAppeared = true
             }
             // Rest fades in slowly after headline settles
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
-                withAnimation(.easeOut(duration: 1.0)) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                withAnimation(.easeOut(duration: 0.8)) {
                     restAppeared = true
+                }
+            }
+            // Mockup appears with slight delay and scale animation
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                    mockupAppeared = true
                 }
             }
         }
         .onDisappear {
             headlineAppeared = false
             restAppeared = false
+            mockupAppeared = false
         }
+    }
+}
+
+// MARK: - Onboarding Mockup: Boarding Pass (Travel Agency)
+private struct OnboardingBoardingPassMockup: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            // Top header
+            HStack {
+                Image(systemName: "airplane")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(white: 0.35))
+                Text("BOARDING PASS")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(white: 0.35))
+                    .tracking(1.5)
+                Spacer()
+                Text("NOOR AIRLINES")
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color(white: 0.5))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color(white: 0.92))
+            
+            // Main ticket body
+            HStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("FROM")
+                                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.black.opacity(0.6))
+                            Text("Current You")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.black)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("TO")
+                                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.black.opacity(0.6))
+                            Text("Your Dream")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.black)
+                        }
+                    }
+                    
+                    // Flight path
+                    HStack(spacing: 6) {
+                        Circle().fill(Color(white: 0.6)).frame(width: 5, height: 5)
+                        Rectangle().fill(Color(white: 0.75)).frame(height: 1).frame(maxWidth: .infinity)
+                        Image(systemName: "airplane").font(.system(size: 10)).foregroundStyle(Color.noorAccent)
+                        Rectangle().fill(Color(white: 0.75)).frame(height: 1).frame(maxWidth: .infinity)
+                        Circle().fill(Color.noorAccent).frame(width: 5, height: 5)
+                    }
+                    
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar").font(.system(size: 8)).foregroundStyle(Color(white: 0.5))
+                        Text("ETA: Your Timeline")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Color(white: 0.4))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                
+                // Perforation
+                VStack(spacing: 3) {
+                    ForEach(0..<8, id: \.self) { _ in
+                        Circle().fill(Color.noorBackground).frame(width: 3, height: 3)
+                    }
+                }
+                .padding(.vertical, 6)
+                
+                // Right stub with progress
+                VStack(spacing: 6) {
+                    ZStack {
+                        Circle()
+                            .stroke(Color(white: 0.8), lineWidth: 3)
+                            .frame(width: 36, height: 36)
+                        Circle()
+                            .trim(from: 0, to: 0.45)
+                            .stroke(Color.noorAccent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                            .frame(width: 36, height: 36)
+                            .rotationEffect(.degrees(-90))
+                        Text("45%")
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundStyle(.black)
+                    }
+                    Text("3/7")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.black)
+                    Text("STEPS")
+                        .font(.system(size: 7, weight: .medium))
+                        .foregroundStyle(Color(white: 0.5))
+                }
+                .frame(width: 60)
+                .padding(.vertical, 10)
+            }
+            .background(Color.white)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
+    }
+}
+
+// MARK: - Onboarding Mockup: Notification (Brain Prioritizes)
+private struct OnboardingNotificationMockup: View {
+    @State private var show1 = false
+    @State private var show2 = false
+    @State private var show3 = false
+
+    private let appIcon: UIImage? = {
+        if let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+           let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+           let files = primary["CFBundleIconFiles"] as? [String],
+           let name = files.last {
+            return UIImage(named: name)
+        }
+        return UIImage(named: "AppIcon")
+    }()
+
+    var body: some View {
+        VStack(spacing: 10) {
+            // Notification 1
+            notificationRow(
+                title: "You're on a 7-day streak!",
+                subtitle: "Keep the momentum going.",
+                time: "now"
+            )
+            .opacity(show1 ? 1 : 0)
+            .offset(y: show1 ? 0 : -30)
+
+            // Notification 2
+            notificationRow(
+                title: "Today's challenge is ready",
+                subtitle: "One step closer to your destination.",
+                time: "9:00 AM"
+            )
+            .opacity(show2 ? 1 : 0)
+            .offset(y: show2 ? 0 : -30)
+
+            // Notification 3
+            notificationRow(
+                title: "You completed all habits!",
+                subtitle: "Your future self thanks you.",
+                time: "Yesterday"
+            )
+            .opacity(show3 ? 1 : 0)
+            .offset(y: show3 ? 0 : -30)
+        }
+        .onAppear {
+            // Staggered pop-in with haptics
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.7)) {
+                    show1 = true
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.7)) {
+                    show2 = true
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.7)) {
+                    show3 = true
+                }
+            }
+        }
+        .onDisappear {
+            show1 = false
+            show2 = false
+            show3 = false
+        }
+    }
+
+    private func notificationRow(title: String, subtitle: String, time: String) -> some View {
+        HStack(spacing: 10) {
+            // Real app icon
+            Group {
+                if let icon = appIcon {
+                    Image(uiImage: icon)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    // Fallback
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.noorBackground)
+                        .overlay(
+                            Image(systemName: "sparkle")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.white)
+                        )
+                }
+            }
+            .frame(width: 38, height: 38)
+            .clipShape(RoundedRectangle(cornerRadius: 9))
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text("Noor")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.black)
+                    Spacer()
+                    Text(time)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(white: 0.45))
+                }
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.black)
+                Text(subtitle)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color(white: 0.35))
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.ultraThinMaterial)
+        .background(Color(white: 0.97).opacity(0.85))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .shadow(color: Color.black.opacity(0.1), radius: 12, x: 0, y: 6)
+    }
+}
+
+// MARK: - Onboarding Mockup: Task Completion (Dopamine) - Matches Home Page Exactly
+private struct OnboardingTaskCompletionMockup: View {
+    @State private var showRow1 = false
+    @State private var showRow2 = false
+    @State private var showRow3 = false
+    @State private var task1Done = false
+    @State private var task2Done = false
+    @State private var task3Done = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header row
+            HStack {
+                Text("Today's Itinerary")
+                    .font(.system(size: 18, weight: .semibold, design: .serif))
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                Text(allDone ? "Done!" : "\(completedCount)/3")
+                    .font(.system(size: 14, weight: .bold, design: .serif))
+                    .foregroundStyle(allDone ? Color.noorSuccess : Color.noorAccent)
+            }
+
+            // Status line
+            Text(allDone
+                 ? "All done — you crushed it."
+                 : "\(3 - completedCount) thing\(3 - completedCount == 1 ? "" : "s") left today")
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(Color.noorTextSecondary)
+
+            // Task list — rows appear one at a time
+            VStack(spacing: 0) {
+                taskRow(title: "Journal for 5 minutes", subtitle: "Morning routine", kind: .habit, isCompleted: task3Done)
+                    .opacity(showRow1 ? 1 : 0)
+                    .offset(y: showRow1 ? 0 : 12)
+
+                Divider().background(Color.white.opacity(0.08))
+
+                taskRow(title: "Research Iceland flights", subtitle: "Solo Travel", kind: .mission, isCompleted: task2Done)
+                    .opacity(showRow2 ? 1 : 0)
+                    .offset(y: showRow2 ? 0 : 12)
+
+                Divider().background(Color.white.opacity(0.08))
+
+                taskRow(title: "Update LinkedIn headline", subtitle: "Career Growth", kind: .mission, isCompleted: task1Done)
+                    .opacity(showRow3 ? 1 : 0)
+                    .offset(y: showRow3 ? 0 : 12)
+            }
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .onAppear {
+            // Rows pop in one at a time
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.easeOut(duration: 0.35)) { showRow1 = true }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.easeOut(duration: 0.35)) { showRow2 = true }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.easeOut(duration: 0.35)) { showRow3 = true }
+            }
+
+            // Auto-complete with haptics: top → bottom
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { task3Done = true }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.8) {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { task2Done = true }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.6) {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { task1Done = true }
+            }
+        }
+        .onDisappear {
+            showRow1 = false; showRow2 = false; showRow3 = false
+            task1Done = false; task2Done = false; task3Done = false
+        }
+    }
+
+    private var completedCount: Int {
+        [task1Done, task2Done, task3Done].filter { $0 }.count
+    }
+
+    private var allDone: Bool { task1Done && task2Done && task3Done }
+
+    private enum TaskKind { case habit, mission }
+
+    private func taskRow(title: String, subtitle: String, kind: TaskKind, isCompleted: Bool) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .stroke(isCompleted ? Color.noorSuccess : Color.white.opacity(0.2), lineWidth: 2)
+                    .frame(width: 28, height: 28)
+
+                if isCompleted {
+                    Circle()
+                        .fill(Color.noorSuccess)
+                        .frame(width: 28, height: 28)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(isCompleted ? Color.noorTextSecondary.opacity(0.5) : .white)
+                    .strikethrough(isCompleted, color: Color.noorTextSecondary.opacity(0.4))
+                    .lineLimit(1)
+
+                Text(kind == .mission ? "Challenge · \(subtitle)" : "Habit · \(subtitle)")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(kind == .mission ? Color.noorAccent.opacity(0.7) : Color.noorSuccess.opacity(0.7))
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.noorTextSecondary.opacity(0.3))
+        }
+        .padding(.vertical, 10)
+    }
+}
+
+// MARK: - Onboarding Mockup: Vision Feature (Reduce Friction)
+private struct OnboardingVisionMockup: View {
+    @State private var show1 = false
+    @State private var show2 = false
+    @State private var show3 = false
+    @State private var show4 = false
+
+    // Same color scheme as the main app (noor theme)
+    private let destinationColor = Color.noorAccent
+    private let pinterestColor = Color.noorOrange
+    private let instagramColor = Color.noorRoseGold
+    private let actionColor = Color.noorSuccess
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Context header — ties to the boarding pass / journey
+            HStack(spacing: 8) {
+                Image(systemName: "eye.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.noorOrange)
+                Text("Vision Board")
+                    .font(.system(size: 14, weight: .bold, design: .serif))
+                    .foregroundStyle(.white)
+                Spacer()
+                Text("Solo Travel")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.noorOrange)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.noorOrange.opacity(0.15))
+                    .clipShape(Capsule())
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+
+            // Vision items
+            VStack(spacing: 6) {
+                visionRow(
+                    icon: "globe.americas.fill",
+                    color: destinationColor,
+                    title: "Santorini, Greece",
+                    subtitle: "Search flights & hotels",
+                    actionIcon: "airplane",
+                    actionLabel: "Book"
+                )
+                .opacity(show1 ? 1 : 0)
+                .offset(x: show1 ? 0 : -20)
+
+                visionRow(
+                    icon: "photo.on.rectangle.angled",
+                    color: pinterestColor,
+                    title: "Travel outfit inspo",
+                    subtitle: "pinterest.com/board",
+                    actionIcon: "arrow.up.right",
+                    actionLabel: "Open"
+                )
+                .opacity(show2 ? 1 : 0)
+                .offset(x: show2 ? 0 : -20)
+
+                visionRow(
+                    icon: "camera.fill",
+                    color: instagramColor,
+                    title: "@santorini.guide",
+                    subtitle: "instagram.com",
+                    actionIcon: "arrow.up.right",
+                    actionLabel: "Open"
+                )
+                .opacity(show3 ? 1 : 0)
+                .offset(x: show3 ? 0 : -20)
+
+                visionRow(
+                    icon: "bolt.fill",
+                    color: actionColor,
+                    title: "Renew passport",
+                    subtitle: "Next step to book trip",
+                    actionIcon: "checkmark",
+                    actionLabel: "Done"
+                )
+                .opacity(show4 ? 1 : 0)
+                .offset(x: show4 ? 0 : -20)
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 12)
+        }
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.noorOrange.opacity(0.2), lineWidth: 1)
+        )
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.easeOut(duration: 0.35)) { show1 = true }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.easeOut(duration: 0.35)) { show2 = true }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.easeOut(duration: 0.35)) { show3 = true }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.7) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.easeOut(duration: 0.35)) { show4 = true }
+            }
+        }
+        .onDisappear {
+            show1 = false; show2 = false; show3 = false; show4 = false
+        }
+    }
+
+    private func visionRow(icon: String, color: Color, title: String, subtitle: String, actionIcon: String, actionLabel: String) -> some View {
+        HStack(spacing: 10) {
+            // Icon badge
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(color)
+                .frame(width: 34, height: 34)
+                .background(color.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            // Title + subtitle
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.noorTextSecondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 4)
+
+            // Action button
+            HStack(spacing: 3) {
+                Image(systemName: actionIcon)
+                    .font(.system(size: 10, weight: .semibold))
+                Text(actionLabel)
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(color)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(color.opacity(0.15))
+            .clipShape(Capsule())
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.white.opacity(0.03))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+// MARK: - Onboarding Mockup: Passport (Vacation tracking)
+private struct OnboardingPassportMockup: View {
+    @State private var showPin1 = false
+    @State private var showPin2 = false
+    @State private var showPin3 = false
+    @State private var showPin4 = false
+    @State private var showMetrics = false
+
+    // Sample pin positions on the map image (x%, y%)
+    private let samplePins: [(x: CGFloat, y: CGFloat, label: String)] = [
+        (0.48, 0.30, "Paris"),      // Europe
+        (0.72, 0.34, "Tokyo"),      // Japan
+        (0.20, 0.36, "New York"),   // North America
+        (0.52, 0.58, "Cape Town"), // Africa
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Mini airplane banner
+            HStack(spacing: 5) {
+                ForEach(0..<5) { _ in
+                    Image(systemName: "airplane")
+                        .font(.system(size: 7, weight: .medium))
+                        .foregroundStyle(Color.noorViolet.opacity(0.5))
+                }
+            }
+            .padding(.vertical, 6)
+
+            // Mini world map with pins
+            GeometryReader { geo in
+                ZStack {
+                    Image("PassportWorldMapPurple")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    // Animated pins
+                    pinDot(at: samplePins[0], in: geo.size, visible: showPin1)
+                    pinDot(at: samplePins[1], in: geo.size, visible: showPin2)
+                    pinDot(at: samplePins[2], in: geo.size, visible: showPin3)
+                    pinDot(at: samplePins[3], in: geo.size, visible: showPin4)
+                }
+            }
+            .frame(height: 130)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .padding(.horizontal, 8)
+
+            // Metrics row
+            HStack(spacing: 8) {
+                mockupMetric(label: "PLACES VISITED", value: "4")
+                mockupMetric(label: "COUNTRIES", value: "3")
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 10)
+            .padding(.bottom, 12)
+            .opacity(showMetrics ? 1 : 0)
+            .offset(y: showMetrics ? 0 : 10)
+        }
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.noorViolet.opacity(0.2), lineWidth: 1)
+        )
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { showPin1 = true }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { showPin2 = true }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { showPin3 = true }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { showPin4 = true }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                withAnimation(.easeOut(duration: 0.4)) { showMetrics = true }
+            }
+        }
+        .onDisappear {
+            showPin1 = false; showPin2 = false; showPin3 = false; showPin4 = false; showMetrics = false
+        }
+    }
+
+    private func pinDot(at pin: (x: CGFloat, y: CGFloat, label: String), in size: CGSize, visible: Bool) -> some View {
+        ZStack {
+            Circle()
+                .fill(Color.noorAccent.opacity(0.4))
+                .frame(width: 16, height: 16)
+            Circle()
+                .fill(Color.noorAccent)
+                .frame(width: 8, height: 8)
+                .shadow(color: .black.opacity(0.4), radius: 2)
+        }
+        .scaleEffect(visible ? 1 : 0)
+        .opacity(visible ? 1 : 0)
+        .position(x: size.width * pin.x, y: size.height * pin.y)
+    }
+
+    private func mockupMetric(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .foregroundStyle(Color.noorTextSecondary)
+            Text(value)
+                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -1460,6 +2348,56 @@ private struct OnboardingStoryInputView: View {
     }
 }
 
+private struct OnboardingDepartureInputView: View {
+    @Binding var departure: String
+    let onNext: () -> Void
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Where are you departing from?")
+                    .font(NoorFont.largeTitle)
+                    .foregroundStyle(.white)
+
+                Text("This doesn't have to be a place.")
+                    .font(.system(size: 20, weight: .regular, design: .serif))
+                    .foregroundStyle(Color.noorRoseGold)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 24)
+
+            TextField("e.g. Overthinking, 9-to-5, Square one", text: $departure)
+                .textFieldStyle(.plain)
+                .font(NoorFont.title)
+                .foregroundStyle(.white)
+                .tint(Color.noorAccent)
+                .padding(20)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .focused($isFocused)
+
+            Spacer()
+
+            OnboardingTextButton(
+                title: "Continue",
+                isDisabled: false,
+                action: {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        onNext()
+                    }
+                }
+            )
+            .padding(.bottom, 20)
+        }
+        .padding(.horizontal, NoorLayout.horizontalPadding)
+        .onAppear { isFocused = true }
+    }
+}
+
 private struct OnboardingNameInputView: View {
     @Binding var userName: String
     let onNext: () -> Void
@@ -1557,11 +2495,11 @@ private struct OnboardingTextButton: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Text(title)
-                    .font(NoorFont.bodyLarge)
+                    .font(NoorFont.onboardingBodyLarge)
                 Image(systemName: "arrow.right")
                     .font(.system(size: 14, weight: .medium))
             }
-            .foregroundStyle(isDisabled ? Color.noorTextSecondary.opacity(0.5) : Color.noorAccent)
+            .foregroundStyle(isDisabled ? Color.noorTextSecondary.opacity(0.5) : .white)
         }
         .disabled(isDisabled)
         .buttonStyle(.plain)
@@ -1580,11 +2518,11 @@ struct CategorySelectionRow: View {
             HStack(spacing: 16) {
                 Image(systemName: category.icon)
                     .font(.system(size: 24))
-                    .foregroundStyle(isSelected ? .white : Color.noorRoseGold)
+                    .foregroundStyle(isSelected ? .white : Color.noorAccent)
                     .frame(width: 40)
 
                 Text(category.displayName)
-                    .font(NoorFont.body)
+                    .font(NoorFont.onboardingBody)
                     .foregroundStyle(isSelected ? .white : Color.noorTextSecondary)
 
                 Spacer()
@@ -1595,12 +2533,8 @@ struct CategorySelectionRow: View {
                 }
             }
             .padding(16)
-            .background(isSelected ? Color.noorAccent.opacity(0.3) : Color.white.opacity(0.08))
+            .background(isSelected ? Color.noorViolet.opacity(0.5) : Color.white.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(isSelected ? Color.noorAccent : Color.clear, lineWidth: 2)
-            )
         }
         .buttonStyle(.plain)
     }
@@ -1622,7 +2556,7 @@ struct ItineraryChallengeRow: View {
 
                 if isUnlocked {
                     Text("\(number)")
-                        .font(NoorFont.callout)
+                        .font(NoorFont.onboardingCallout)
                         .fontWeight(isFirstUnlocked ? .bold : .regular)
                         .foregroundStyle(isFirstUnlocked ? .white : Color.noorTextPrimary)
                 } else {
@@ -1634,18 +2568,18 @@ struct ItineraryChallengeRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(challenge.title)
-                    .font(NoorFont.body)
+                    .font(NoorFont.onboardingBody)
                     .fontWeight(isFirstUnlocked ? .semibold : .regular)
                     .foregroundStyle(isUnlocked ? .white : Color.noorTextSecondary.opacity(0.5))
 
                 if isUnlocked {
                     Text(challenge.description)
-                        .font(NoorFont.caption)
+                        .font(NoorFont.onboardingCaption)
                         .foregroundStyle(Color.noorTextSecondary)
                         .lineLimit(2)
 
                     Text(challenge.estimatedTime)
-                        .font(NoorFont.caption)
+                        .font(NoorFont.onboardingCaption)
                         .foregroundStyle(isFirstUnlocked ? Color.noorSuccess : Color.noorTextSecondary.opacity(0.7))
                 }
             }
@@ -1678,7 +2612,7 @@ struct GenderButton: View {
         Button(action: action) {
             HStack {
                 Text(title)
-                    .font(NoorFont.body)
+                    .font(NoorFont.onboardingBody)
                     .foregroundStyle(isSelected ? .white : Color.noorTextSecondary)
 
                 Spacer()
@@ -1803,7 +2737,7 @@ private struct OnboardingFeatureRow: View {
                 .foregroundStyle(Color.noorSuccess)
 
             Text(text)
-                .font(NoorFont.body)
+                .font(NoorFont.onboardingBody)
                 .foregroundStyle(Color.noorCharcoal)
         }
     }

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct ProgressTabView: View {
     @Environment(DataManager.self) private var dataManager
@@ -18,7 +19,10 @@ struct ProgressTabView: View {
     @State private var displayedMonth: Date = Date()
     @State private var selectedTab: Int = 0
     @State private var legendPopup: String? = nil
+    @State private var metricPopup: (id: String, value: String)? = nil
     @State private var selectedDateForInsight: IdentifiableDate?
+    @State private var selectedGoal: Goal?
+    @State private var goalToShare: Goal?
     private let calendar = Calendar.current
 
     private var globalStreak: Int {
@@ -75,22 +79,20 @@ struct ProgressTabView: View {
                     }
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
-                            // Square cells side by side
-                            HStack(spacing: 12) {
-                                journeySquareCell
-                                habitsSquareCell
-                            }
-                            .padding(.horizontal, 20)
-                            .padding(.top, 16)
-
-                            // Your Momentum section
-                            momentumSection
-                                .padding(.horizontal, 20)
-
-                            // Calendar view
+                        VStack(alignment: .leading, spacing: 16) {
+                            // Calendar at top (compact)
                             calendarSection
-                                .padding(.horizontal, 20)
+                                .padding(.horizontal, 16)
+                                .padding(.top, 8)
+
+                            // Metrics grid below calendar
+                            metricsSection
+                                .padding(.horizontal, 16)
+
+                            // Completed Journeys (boarding passes)
+                            completedJourneysSection
+                                .padding(.horizontal, 16)
+                                .padding(.top, 8)
                         }
                         .padding(.bottom, 100)
                     }
@@ -137,6 +139,48 @@ struct ProgressTabView: View {
                     .padding(.horizontal, 40)
                     .transition(.scale.combined(with: .opacity))
                 }
+                
+                // Metric explanation popup (definition + your number)
+                if let popup = metricPopup {
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                        .onTapGesture { withAnimation { metricPopup = nil } }
+                    
+                    VStack(spacing: 12) {
+                        Text(metricPopupTitle(for: popup.id))
+                            .font(NoorFont.title2)
+                            .foregroundStyle(.white)
+                        
+                        Text(metricPopupDescription(for: popup.id, value: popup.value))
+                            .font(NoorFont.body)
+                            .foregroundStyle(Color.noorTextSecondary)
+                            .multilineTextAlignment(.center)
+                        
+                        Button {
+                            withAnimation { metricPopup = nil }
+                        } label: {
+                            Text("Got it")
+                                .font(NoorFont.callout)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 10)
+                                .background(Color.noorAccent)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 4)
+                    }
+                    .padding(24)
+                    .background(Color.noorDeepPurple)
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.5), radius: 20)
+                    .padding(.horizontal, 40)
+                    .transition(.scale.combined(with: .opacity))
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
@@ -148,18 +192,11 @@ struct ProgressTabView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         showStreakSheet = true
                     } label: {
                         HStack(spacing: 6) {
-                            Image(systemName: "flame.fill")
-                                .font(.system(size: 16))
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [Color.noorOrange, Color.noorAccent],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
+                            FlickerFlameView()
                             Text("\(globalStreak)")
                                 .font(.system(size: 18, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
@@ -173,11 +210,23 @@ struct ProgressTabView: View {
                 }
             }
             .sheet(isPresented: $showStreakSheet) {
-                StreakCalendarSheet(streakCount: globalStreak, goals: goals, onDismiss: { showStreakSheet = false })
+                SimpleStreakPopup(streakCount: globalStreak, onDismiss: { showStreakSheet = false })
+                    .presentationDetents([PresentationDetent.height(280)])
+                    .presentationDragIndicator(.visible)
             }
             .sheet(item: $selectedDateForInsight) { idDate in
                 DayInsightSheet(date: idDate.wrapped, onDismiss: { selectedDateForInsight = nil })
                     .environment(dataManager)
+                    .presentationDetents([.height(480)])
+                    .presentationCornerRadius(24)
+                    .presentationDragIndicator(.visible)
+            }
+            .sheet(item: $selectedGoal) { goal in
+                DailyCheckInView(goal: goal)
+                    .environment(dataManager)
+            }
+            .sheet(item: $goalToShare) { goal in
+                ProgressShareSheet(goal: goal)
             }
             .onAppear {
                 loadGoals()
@@ -190,200 +239,243 @@ struct ProgressTabView: View {
         }
     }
 
-    // MARK: - Square Cells
-    private var journeySquareCell: some View {
+    // MARK: - Metrics Section (Daily vs Lifetime)
+    private var metricsSection: some View {
         let totalProgress = goals.isEmpty ? 0 : goals.reduce(0.0) { $0 + $1.progress } / Double(goals.count)
+        let todayHabitsComplete = microhabits.filter { isCompletedToday($0) }.count
+        let totalHabits = microhabits.count
+        
+        return VStack(alignment: .leading, spacing: 20) {
+            // Daily
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Today")
+                    .font(.system(size: 24, weight: .bold, design: .serif))
+                    .foregroundStyle(.white)
 
-        return Button {
-            selectedTab = 0 // Navigate to Home (journeys)
-            NotificationCenter.default.post(name: NSNotification.Name("switchToTab"), object: 0)
-        } label: {
-            VStack(spacing: 4) {
-                HStack(spacing: 6) {
-                    Image(systemName: "airplane.departure")
-                        .font(.system(size: 16))
-                        .foregroundStyle(Color.noorAccent)
-                    Text("Journeys")
-                        .font(.system(size: 17, weight: .semibold, design: .serif))
-                        .foregroundStyle(.white)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 12)
-                .padding(.top, 12)
-
-                Spacer()
-
-                ZStack {
-                    Circle()
-                        .stroke(Color.noorViolet.opacity(0.3), lineWidth: 8)
-                        .frame(width: 100, height: 100)
-
-                    Circle()
-                        .trim(from: 0, to: totalProgress / 100)
-                        .stroke(Color.noorAccent, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                        .frame(width: 100, height: 100)
-                        .rotationEffect(.degrees(-90))
-
-                    VStack(spacing: 2) {
-                        Text("\(Int(totalProgress))%")
-                            .font(.system(size: 24, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                        Text("complete")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.noorTextSecondary)
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    Button {
+                        metricPopup = ("today", "\(todayHabitsComplete)/\(totalHabits)")
+                    } label: {
+                        metricCell(
+                            icon: "leaf.fill",
+                            iconColor: Color.noorSuccess,
+                            value: "\(todayHabitsComplete)/\(totalHabits)",
+                            label: "Habits done"
+                        )
                     }
-                }
+                    .buttonStyle(.plain)
 
-                Spacer()
+                    Button {
+                        metricPopup = ("todayChallenges", "\(todayCompletedChallenges)/\(todayTotalChallenges)")
+                    } label: {
+                        metricCell(
+                            icon: "checkmark.seal.fill",
+                            iconColor: Color.noorRoseGold,
+                            value: "\(todayCompletedChallenges)/\(todayTotalChallenges)",
+                            label: "Challenges done"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            .frame(maxWidth: .infinity)
-            .aspectRatio(1, contentMode: .fit)
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 20))
+
+            // Lifetime
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Lifetime")
+                    .font(.system(size: 24, weight: .bold, design: .serif))
+                    .foregroundStyle(.white)
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    Button {
+                        metricPopup = ("overall", "\(Int(totalProgress))%")
+                    } label: {
+                        metricOverallCell(progress: totalProgress)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        metricPopup = ("streak", "\(globalStreak)")
+                    } label: {
+                        metricStreakCell()
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        metricPopup = ("journeys", "\(goals.count)")
+                    } label: {
+                        metricCell(
+                            icon: "airplane.departure",
+                            iconColor: Color.noorAccent,
+                            value: "\(goals.count)",
+                            label: "Journeys"
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        metricPopup = ("done", "\(totalCompletedChallenges)")
+                    } label: {
+                        metricCell(
+                            icon: "checkmark.circle.fill",
+                            iconColor: Color.noorViolet,
+                            value: "\(totalCompletedChallenges)",
+                            label: "Challenges done"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
-        .buttonStyle(.plain)
+    }
+    
+    private func metricOverallCell(progress: Double) -> some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.15), lineWidth: 5)
+                    .frame(width: 56, height: 56)
+                Circle()
+                    .trim(from: 0, to: progress / 100)
+                    .stroke(Color.white, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .frame(width: 56, height: 56)
+                    .rotationEffect(.degrees(-90))
+                Text("\(Int(progress))%")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+            }
+            Text("Overall")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Color.noorTextSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
-    private var habitsSquareCell: some View {
-        let todayCompletedCount = microhabits.filter { isCompletedToday($0) }.count
-        let totalCount = microhabits.count
-        let completionRate = totalCount > 0 ? Double(todayCompletedCount) / Double(totalCount) * 100 : 0
-
-        return Button {
-            NotificationCenter.default.post(name: NSNotification.Name("switchToTab"), object: 3)
-        } label: {
-            VStack(spacing: 4) {
-                HStack(spacing: 6) {
-                    Image(systemName: "leaf.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(Color.noorSuccess)
-                    Text("Habits")
-                        .font(.system(size: 17, weight: .semibold, design: .serif))
-                        .foregroundStyle(.white)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 12)
-                .padding(.top, 12)
-
-                Spacer()
-
-                ZStack {
-                    Circle()
-                        .stroke(Color.noorViolet.opacity(0.3), lineWidth: 8)
-                        .frame(width: 100, height: 100)
-
-                    Circle()
-                        .trim(from: 0, to: completionRate / 100)
-                        .stroke(Color.noorSuccess, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                        .frame(width: 100, height: 100)
-                        .rotationEffect(.degrees(-90))
-
-                    VStack(spacing: 2) {
-                        Text("\(todayCompletedCount)/\(totalCount)")
-                            .font(.system(size: 22, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                        Text("today")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.noorTextSecondary)
-                    }
-                }
-
-                Spacer()
-            }
-            .frame(maxWidth: .infinity)
-            .aspectRatio(1, contentMode: .fit)
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 20))
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Momentum Section
-    private var momentumSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Your Momentum")
-                .font(NoorFont.title)
+    private func metricStreakCell() -> some View {
+        VStack(spacing: 6) {
+            Text("\(globalStreak)")
+                .font(.system(size: 26, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
-            
-            HStack(spacing: 8) {
-                // Streak cell
-                VStack(spacing: 4) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Color.noorOrange)
-                        Text("Day Streak")
-                            .font(.system(size: 13, weight: .semibold, design: .serif))
-                            .foregroundStyle(.white)
-                    }
-                    
-                    Text("\(globalStreak)")
-                        .font(.system(size: 28, weight: .bold, design: .serif))
-                        .foregroundStyle(.white)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                
-                // Flights Booked
-                VStack(spacing: 4) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "airplane.departure")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Color.noorAccent)
-                        Text("Journeys")
-                            .font(.system(size: 13, weight: .semibold, design: .serif))
-                            .foregroundStyle(.white)
-                    }
-                    
-                    Text("\(goals.count)")
-                        .font(.system(size: 28, weight: .bold, design: .serif))
-                        .foregroundStyle(.white)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                
-                // Completed Challenges
-                VStack(spacing: 4) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Color.noorSuccess)
-                        Text("Done")
-                            .font(.system(size: 13, weight: .semibold, design: .serif))
-                            .foregroundStyle(.white)
-                    }
-                    
-                    Text("\(totalCompletedChallenges)")
-                        .font(.system(size: 28, weight: .bold, design: .serif))
-                        .foregroundStyle(.white)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-            }
+            Image(systemName: "flame.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(Color.noorOrange.opacity(0.5))
+            Text("Day Streak")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Color.noorTextSecondary)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func metricCell(icon: String, iconColor: Color, value: String, label: String) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 24))
+                .foregroundStyle(iconColor)
+
+            Text(value)
+                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+
+            Text(label)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Color.noorTextSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
     
     private var totalCompletedChallenges: Int {
         goals.flatMap { $0.dailyTasks }.filter { $0.isCompleted }.count
     }
 
-    // MARK: - Calendar Section
+    private var todayCompletedChallenges: Int {
+        goals.flatMap { $0.dailyTasks }.filter { task in
+            task.completedDates.contains { calendar.isDateInToday($0) }
+        }.count
+    }
+
+    private var todayTotalChallenges: Int {
+        goals.flatMap { $0.dailyTasks }.filter { $0.isUnlocked && !$0.isCompleted }.count + todayCompletedChallenges
+    }
+
+    // MARK: - Completed Journeys Section
+    private var completedJourneysSection: some View {
+        let completedGoals = goals.filter { $0.isComplete }
+        return Group {
+            if !completedGoals.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Completed Journeys")
+                            .font(.system(size: 24, weight: .bold, design: .serif))
+                            .foregroundStyle(.white)
+                        Spacer()
+                        Text("\(completedGoals.count)")
+                            .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Color.noorSuccess)
+                    }
+
+                    ForEach(completedGoals.sorted { ($0.archivedAt ?? $0.createdAt) > ($1.archivedAt ?? $1.createdAt) }, id: \.id) { goal in
+                        Button {
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            selectedGoal = goal
+                        } label: {
+                            ProgressBoardingPassCard(goal: goal, onShare: {
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                goalToShare = goal
+                            })
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Calendar Section (compact, at top)
     private var calendarSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Progress Calendar")
-                .font(NoorFont.title)
-                .foregroundStyle(.white)
+        VStack(spacing: 8) {
+            // Month navigation (compact)
+            HStack {
+                Button {
+                    if let prev = calendar.date(byAdding: .month, value: -1, to: displayedMonth) {
+                        displayedMonth = prev
+                    }
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.noorAccent)
+                }
+                .buttonStyle(.plain)
 
-            Text("Track your journey milestones and habit completions")
-                .font(NoorFont.caption)
-                .foregroundStyle(Color.noorTextSecondary)
+                Spacer()
 
+                Text(displayedMonth, format: .dateTime.month(.wide).year())
+                    .font(NoorFont.title2)
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                Button {
+                    if let next = calendar.date(byAdding: .month, value: 1, to: displayedMonth) {
+                        displayedMonth = next
+                    }
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.noorAccent)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 4)
+
+            // Calendar grid
             ProgressCalendarView(
                 month: displayedMonth,
                 streakDates: streakDates,
@@ -397,62 +489,10 @@ struct ProgressTabView: View {
                     }
                 },
                 onSelectDay: { date in
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     selectedDateForInsight = IdentifiableDate(wrapped: date)
                 }
             )
-
-            HStack(spacing: 12) {
-                Button {
-                    if let prev = calendar.date(byAdding: .month, value: -1, to: displayedMonth) {
-                        displayedMonth = prev
-                    }
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.noorRoseGold)
-                        .frame(width: 32, height: 32)
-                        .background(Color.white.opacity(0.1))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
-                Text(displayedMonth, format: .dateTime.month(.wide).year())
-                    .font(NoorFont.body)
-                    .foregroundStyle(.white)
-
-                Spacer()
-
-                Button {
-                    if let next = calendar.date(byAdding: .month, value: 1, to: displayedMonth) {
-                        displayedMonth = next
-                    }
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.noorRoseGold)
-                        .frame(width: 32, height: 32)
-                        .background(Color.white.opacity(0.1))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
-
-            if let milestone = milestoneDate {
-                HStack(spacing: 8) {
-                    Image(systemName: "flag.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.noorRoseGold)
-                    Text("Next milestone: \(milestone.title)")
-                        .font(NoorFont.caption)
-                        .foregroundStyle(Color.noorTextSecondary)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.noorRoseGold.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
         }
     }
 
@@ -474,6 +514,38 @@ struct ProgressTabView: View {
             return "Days when you checked off at least one of your daily habits. Consistency here builds lasting change."
         case "Streak":
             return "Your streak grows for every day you show up on the app. The flame marks each day you kept the streak alive."
+        default:
+            return ""
+        }
+    }
+    
+    // MARK: - Metric Popups (definition + your number)
+    private func metricPopupTitle(for id: String) -> String {
+        switch id {
+        case "today": return "Habits Today"
+        case "todayChallenges": return "Challenges Today"
+        case "overall": return "Overall Progress"
+        case "streak": return "Day Streak"
+        case "journeys": return "Journeys"
+        case "done": return "Challenges Done"
+        default: return id
+        }
+    }
+    
+    private func metricPopupDescription(for id: String, value: String) -> String {
+        switch id {
+        case "today":
+            return "How many habits you completed today. You've done \(value) so far—small steps add up."
+        case "todayChallenges":
+            return "Journey challenges you've completed today. You've knocked out \(value) so far—keep the momentum going."
+        case "overall":
+            return "Average completion across all your journeys. You’re at \(value) overall. Each challenge you finish moves this up."
+        case "streak":
+            return "Consecutive days you’ve opened the app and taken action. You’re at \(value) day\(value == "1" ? "" : "s") right now. Keep showing up."
+        case "journeys":
+            return "Active journeys you’re working toward. You have \(value) journey\(value == "1" ? "" : "s")—each is a destination with step-by-step challenges."
+        case "done":
+            return "Total journey challenges you’ve completed. You’ve finished \(value) so far. Every one counts toward your growth."
         default:
             return ""
         }
@@ -570,10 +642,9 @@ private struct ProgressCalendarView: View {
     private func hasJourneyActivity(on date: Date) -> Bool {
         let dayStart = calendar.startOfDay(for: date)
         for goal in goals {
-            for task in goal.dailyTasks where task.isCompleted {
-                if let completedAt = task.completedAt, calendar.isDate(completedAt, inSameDayAs: dayStart) {
-                    return true
-                }
+            for task in goal.dailyTasks {
+                let completedOnDay = task.completedDates.contains { calendar.isDate($0, inSameDayAs: dayStart) }
+                if completedOnDay { return true }
             }
         }
         return false
@@ -736,7 +807,7 @@ private struct CalendarDayCell: View {
                     .font(.system(size: 14, weight: isToday || isStreak ? .bold : .regular))
                     .foregroundStyle(textColor)
 
-                if hasAnyActivity && !isToday {
+                if hasAnyActivity {
                     HStack(spacing: 2) {
                         if hasJourney {
                             Circle().fill(Color.noorAccent).frame(width: 4, height: 4)
@@ -749,6 +820,202 @@ private struct CalendarDayCell: View {
             }
         }
         .aspectRatio(1, contentMode: .fit)
+    }
+}
+
+// MARK: - Simple Streak Popup
+struct SimpleStreakPopup: View {
+    let streakCount: Int
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.noorBackground
+                .ignoresSafeArea()
+
+            VStack(spacing: 12) {
+                // Flame icon on top
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color.noorOrange, Color(hex: "DC2626")],
+                            startPoint: .bottom,
+                            endPoint: .top
+                        )
+                    )
+
+                if streakCount > 0 {
+                    // Number centered below flame
+                    Text("\(streakCount)")
+                        .font(.system(size: 56, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                    
+                    // "Day(s) in a Row" centered below number
+                    Text("Day\(streakCount == 1 ? "" : "s") in a Row")
+                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.noorTextSecondary)
+                } else {
+                    Text("Start your streak!")
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                }
+
+                Text(streakCount > 0
+                     ? "Open the app daily to keep your streak going!"
+                     : "Open Noor tomorrow to start your streak.")
+                    .font(NoorFont.callout)
+                    .foregroundStyle(Color.noorTextSecondary.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 4)
+            }
+        }
+    }
+}
+
+// MARK: - Animated Flame Icon (realistic flicker)
+private struct FlickerFlameView: View {
+    @State private var flickerPhase: CGFloat = 0
+    @State private var scalePhase: CGFloat = 1
+
+    var body: some View {
+        Image(systemName: "flame.fill")
+            .font(.system(size: 16))
+            .foregroundStyle(
+                LinearGradient(
+                    colors: [Color.noorOrange, Color(hex: "DC2626")],
+                    startPoint: .bottom,
+                    endPoint: .top
+                )
+            )
+            .scaleEffect(x: 1, y: scalePhase, anchor: .bottom)
+            .rotationEffect(.degrees(flickerPhase), anchor: .bottom)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.3).repeatForever(autoreverses: true)) {
+                    flickerPhase = 2.5
+                }
+                withAnimation(.easeInOut(duration: 0.4).repeatForever(autoreverses: true)) {
+                    scalePhase = 1.08
+                }
+            }
+    }
+}
+
+// MARK: - Completed Journey Boarding Pass Card
+private struct ProgressBoardingPassCard: View {
+    let goal: Goal
+    let onShare: () -> Void
+
+    private var progress: Double {
+        guard !goal.dailyTasks.isEmpty else { return 0 }
+        let completed = goal.dailyTasks.filter { $0.isCompleted }.count
+        return Double(completed) / Double(goal.dailyTasks.count) * 100
+    }
+    private var completedSteps: Int { goal.dailyTasks.filter { $0.isCompleted }.count }
+    private var totalSteps: Int { goal.dailyTasks.count }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header bar
+            HStack {
+                Image(systemName: "airplane")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(white: 0.35))
+                Text("BOARDING PASS")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(white: 0.35))
+                    .tracking(1.5)
+                Spacer()
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 10))
+                    Text("COMPLETED")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                }
+                .foregroundStyle(Color.noorSuccess)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color.noorSuccess.opacity(0.15))
+
+            // Main content
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("FROM")
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.black.opacity(0.5))
+                        Text(goal.departure.isEmpty ? "Current You" : goal.departure)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.black)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("TO")
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.black.opacity(0.5))
+                        Text(goal.destination.isEmpty ? goal.title : goal.destination)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.black)
+                            .lineLimit(1)
+                    }
+                }
+
+                // Flight path
+                HStack(spacing: 6) {
+                    Circle().fill(Color(white: 0.65)).frame(width: 5, height: 5)
+                    Rectangle().fill(Color.noorSuccess).frame(height: 2).frame(maxWidth: .infinity)
+                    Image(systemName: "airplane").font(.system(size: 10)).foregroundStyle(Color.noorSuccess)
+                    Circle().fill(Color.noorSuccess).frame(width: 5, height: 5)
+                }
+
+                // Timeline + share button row
+                HStack {
+                    if !goal.timeline.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "calendar").font(.system(size: 8)).foregroundStyle(Color(white: 0.5))
+                            Text("ETA: \(goal.timeline)")
+                                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Color(white: 0.4))
+                        }
+                    }
+                    Spacer()
+                    Button {
+                        onShare()
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color(white: 0.4))
+                            .frame(width: 24, height: 24)
+                            .background(Color(white: 0.92))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(14)
+            .background(Color.white)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: Color.black.opacity(0.15), radius: 6, x: 0, y: 3)
+    }
+}
+
+// MARK: - Share Sheet for Progress Tab
+private let progressAppLink = "https://testflight.apple.com/join/BJkkK6N6"
+
+private struct ProgressShareSheet: View {
+    let goal: Goal
+
+    var body: some View {
+        ActivityShareSheet(items: shareItems)
+    }
+
+    private var shareItems: [Any] {
+        let dest = goal.destination.isEmpty ? goal.title : goal.destination
+        let message = "Hey, check out this recent accomplishment of mine — I made it to \(dest)! ✈️\n\nJoin me on Noor:"
+        return [message, progressAppLink]
     }
 }
 

@@ -74,7 +74,7 @@ struct GoldenTicketSheet: View {
                                 .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: isPulsing)
 
                             Text("You have 1 guest pass this year.\nHere's what they'll unlock:")
-                                .font(.system(size: 17, weight: .regular, design: .serif))
+                                .font(NoorFont.body)
                                 .foregroundStyle(Color.noorTextSecondary)
                                 .multilineTextAlignment(.center)
                                 .scaleEffect(isPulsing ? 1.02 : 1.0)
@@ -86,7 +86,7 @@ struct GoldenTicketSheet: View {
                                 .multilineTextAlignment(.center)
 
                             Text("You've shared your pass this year.\nCheck back next year to gift again.")
-                                .font(.system(size: 17, weight: .regular, design: .serif))
+                                .font(NoorFont.body)
                                 .foregroundStyle(Color.noorTextSecondary)
                                 .multilineTextAlignment(.center)
                         }
@@ -187,7 +187,7 @@ struct GoldenTicketSheet: View {
                 .foregroundStyle(Color.noorRoseGold)
                 .frame(width: 22)
             Text(text)
-                .font(.system(size: 16, weight: .regular, design: .serif))
+                .font(NoorFont.body)
                 .foregroundStyle(Color.noorTextSecondary)
         }
     }

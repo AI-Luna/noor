@@ -20,6 +20,7 @@ final class Goal {
     var createdAt: Date
 
     // Travel agency framing
+    var departure: String // Where you're starting from (e.g., "Overthinking", "9-to-5", "Square one")
     var destination: String // The specific goal (e.g., "Iceland", "Senior PM", "$100K")
     var timeline: String // When (e.g., "June 2026")
     var userStory: String // Why it matters to them
@@ -64,6 +65,7 @@ final class Goal {
         title: String,
         goalDescription: String,
         category: String,
+        departure: String = "",
         destination: String = "",
         timeline: String = "",
         userStory: String = "",
@@ -79,6 +81,7 @@ final class Goal {
         self.title = title
         self.goalDescription = goalDescription
         self.category = category
+        self.departure = departure
         self.destination = destination
         self.timeline = timeline
         self.userStory = userStory
@@ -180,6 +183,7 @@ final class Microhabit {
     var reminderMinute: Int?  // 0–59
     var completedDates: [Date]
     var createdAt: Date
+    var isArchived: Bool = false
 
     @Transient
     var type: MicrohabitType {
@@ -224,7 +228,8 @@ final class Microhabit {
         reminderHour: Int? = 9,
         reminderMinute: Int? = 0,
         completedDates: [Date] = [],
-        createdAt: Date = .now
+        createdAt: Date = .now,
+        isArchived: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -242,6 +247,7 @@ final class Microhabit {
         self.reminderMinute = reminderMinute
         self.completedDates = completedDates
         self.createdAt = createdAt
+        self.isArchived = isArchived
     }
 
     @Transient
@@ -335,6 +341,30 @@ enum MicrohabitType: String, CaseIterable {
     }
 }
 
+// MARK: - Travel Pin (real vacation tracking for Passport)
+@Model
+final class TravelPin: Identifiable {
+    @Attribute(.unique) var id: UUID
+    var destination: String      // e.g. "Paris"
+    var country: String          // e.g. "France"
+    var dateVisited: Date
+    var createdAt: Date
+
+    init(
+        id: UUID = UUID(),
+        destination: String,
+        country: String,
+        dateVisited: Date = .now,
+        createdAt: Date = .now
+    ) {
+        self.id = id
+        self.destination = destination
+        self.country = country
+        self.dateVisited = dateVisited
+        self.createdAt = createdAt
+    }
+}
+
 // MARK: - User Profile (stored in UserDefaults)
 struct UserProfile: Codable {
     var name: String
@@ -384,6 +414,7 @@ enum StorageKey {
     static let visionItems = "noor_vision_items"
     static let guestPassCount = "noor_guest_pass_count"
     static let lastDailyFlameDate = "noor_last_daily_flame_date"
+    static let lastAppOpenDate = "noor_last_app_open_date"
 }
 
 // MARK: - Vision item: inspiration + action (Pinterest, destination, or link); can link to a journey
@@ -442,10 +473,10 @@ enum VisionItemKind: String, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .pinterest: return "Pinterest"
-        case .instagram: return "Instagram"
-        case .destination: return "Destination"
-        case .action: return "Next step"
+        case .pinterest: return "Pinterest Board"
+        case .instagram: return "Instagram Post"
+        case .destination: return "Place to Go"
+        case .action: return "Action Step"
         }
     }
 

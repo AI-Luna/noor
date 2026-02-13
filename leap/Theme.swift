@@ -58,16 +58,23 @@ extension Color {
 
 // MARK: - Typography (Luxury magazine feel)
 struct NoorFont {
-    // Using system serif for luxury feel (closest to Aglatia without custom font)
+    // Headings — keep serif for luxury feel
     static let hero = Font.system(size: 40, weight: .bold, design: .serif)
     static let largeTitle = Font.system(size: 32, weight: .bold, design: .serif)
     static let title = Font.system(size: 24, weight: .bold, design: .serif)
     static let title2 = Font.system(size: 18, weight: .semibold, design: .serif)
-    static let bodyLarge = Font.system(size: 18, weight: .regular, design: .serif)
-    static let body = Font.system(size: 16, weight: .regular, design: .serif)
     static let button = Font.system(size: 18, weight: .bold, design: .serif)
-    static let callout = Font.system(size: 15, weight: .medium, design: .serif)
-    static let caption = Font.system(size: 14, weight: .regular, design: .serif)
+    // Body/subtext — normal system font (matches FROM/TO content style)
+    static let bodyText = Font.system(size: 15, weight: .regular)
+    static let bodyLarge = Font.system(size: 18, weight: .regular)
+    static let body = Font.system(size: 15, weight: .regular)
+    static let callout = Font.system(size: 15, weight: .regular)
+    static let caption = Font.system(size: 14, weight: .regular)
+    // Onboarding only — keep original serif body fonts
+    static let onboardingBodyLarge = Font.system(size: 18, weight: .regular, design: .serif)
+    static let onboardingBody = Font.system(size: 16, weight: .regular, design: .serif)
+    static let onboardingCallout = Font.system(size: 15, weight: .medium, design: .serif)
+    static let onboardingCaption = Font.system(size: 14, weight: .regular, design: .serif)
 }
 
 // MARK: - Gradients (PRD spec)

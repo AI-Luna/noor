@@ -123,7 +123,10 @@ struct StreakCalendarSheet: View {
                         month: displayedMonth,
                         streakDates: streakDates,
                         milestoneDate: milestoneDate?.date,
-                        onSelectDay: { selectedDateForInsight = IdentifiableDate(wrapped: $0) }
+                        onSelectDay: { date in
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            selectedDateForInsight = IdentifiableDate(wrapped: date)
+                        }
                     )
 
                     HStack(spacing: 12) {
@@ -234,6 +237,9 @@ struct StreakCalendarSheet: View {
         .sheet(item: $selectedDateForInsight) { idDate in
             DayInsightSheet(date: idDate.wrapped, onDismiss: { selectedDateForInsight = nil })
                 .environment(dataManager)
+                .presentationDetents([.medium, .large])
+                .presentationCornerRadius(24)
+                .presentationDragIndicator(.visible)
         }
     }
 }
@@ -417,74 +423,78 @@ struct DayInsightSheet: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                HStack {
+                // Header with breathing room
+                VStack(alignment: .leading, spacing: 10) {
                     Text("What you accomplished")
                         .font(NoorFont.title)
                         .foregroundStyle(.white)
-                    Spacer()
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(Color.noorTextSecondary)
-                            .frame(width: 32, height: 32)
-                            .background(Color.white.opacity(0.15))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(20)
-                .padding(.bottom, 8)
 
-                VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Text(dateFormatter.string(from: viewingDate))
                             .font(NoorFont.title2)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.noorRoseGold)
+
                         Spacer()
+
                         HStack(spacing: 16) {
                             Button {
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                 if let prev = calendar.date(byAdding: .day, value: -1, to: viewingDate) {
                                     viewingDate = prev
                                 }
                             } label: {
                                 Image(systemName: "chevron.left")
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .font(.system(size: 16, weight: .bold))
                                     .foregroundStyle(Color.noorRoseGold)
+                                    .frame(width: 36, height: 36)
+                                    .background(Color.noorRoseGold.opacity(0.15))
+                                    .clipShape(Circle())
                             }
                             .buttonStyle(.plain)
+
                             Button {
                                 let today = calendar.startOfDay(for: Date())
                                 if let next = calendar.date(byAdding: .day, value: 1, to: viewingDate), next <= today {
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                     viewingDate = next
                                 }
                             } label: {
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .font(.system(size: 16, weight: .bold))
                                     .foregroundStyle(Color.noorRoseGold)
+                                    .frame(width: 36, height: 36)
+                                    .background(Color.noorRoseGold.opacity(0.15))
+                                    .clipShape(Circle())
                             }
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal, 4)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, 20)
 
-                    if isLoading {
-                        ProgressView()
-                            .tint(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 40)
-                    } else if !hasAnyAccomplishments {
-                        VStack(spacing: 12) {
-                            Image(systemName: "calendar.badge.clock")
-                                .font(.system(size: 36))
-                                .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
-                            Text("No recorded activity this day")
-                                .font(NoorFont.body)
-                                .foregroundStyle(Color.noorTextSecondary)
-                        }
+                // Accomplishments content — scrollable list only; header stays fixed
+                if isLoading {
+                    ProgressView()
+                        .tint(.white)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
-                    } else {
-                        VStack(alignment: .leading, spacing: 12) {
+                        .padding(.vertical, 32)
+                } else if !hasAnyAccomplishments {
+                    VStack(spacing: 10) {
+                        Image(systemName: "calendar.badge.clock")
+                            .font(.system(size: 28))
+                            .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
+                        Text("No recorded activity this day")
+                            .font(NoorFont.body)
+                            .foregroundStyle(Color.noorTextSecondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+                } else {
+                    ScrollView(showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 10) {
                             if !habitsCompletedOnDate.isEmpty {
                                 Text("Habits")
                                     .font(NoorFont.caption)
@@ -512,14 +522,14 @@ struct DayInsightSheet: View {
                                 }
                             }
                         }
+                        .padding(.bottom, 24)
                     }
                 }
-                .padding(20)
-                .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 20))
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
         }
         .onAppear {
             Task {

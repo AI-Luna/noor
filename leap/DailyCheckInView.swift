@@ -25,10 +25,15 @@ struct DailyCheckInView: View {
     @State private var showConfetti = false
     @State private var showStreakCelebration = false
     @State private var streakCelebrationCount = 0
+    @State private var completedTaskTitle: String = ""
     @State private var showDueDatePicker = false
     @State private var editingTask: DailyTask?
     @State private var editingDueDate: Date = Date()
     @State private var checkmarkFillProgress: CGFloat = 0
+    @State private var showAddVisionSheet = false
+    @State private var showAddHabitSheet = false
+    @State private var showChallengeDetail = false
+    @State private var linkedVisionItems: [VisionItem] = []
 
     private var displayGoal: Goal { goalRefreshed ?? goal }
     private let calendar = Calendar.current
@@ -65,10 +70,9 @@ struct DailyCheckInView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    goalOverviewSection
                     currentChallengeSection
-                    linkedVisionSection
-                    linkedHabitsSection
+                    goalOverviewSection
+                    visionAndHabitsSection
                     upcomingSection
                     completedSection
                 }
@@ -78,27 +82,61 @@ struct DailyCheckInView: View {
 
             // Confetti overlay
             if showConfetti {
-                ConfettiView(isActive: showConfetti, duration: 2.0)
+                ConfettiView(isActive: showConfetti, pieceCount: 160, duration: 4.0, style: .mixed)
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
             }
         }
-        .navigationTitle(displayGoal.destination.isEmpty ? displayGoal.title : displayGoal.destination)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text(displayGoal.destination.isEmpty ? displayGoal.title : displayGoal.destination)
+                    .font(NoorFont.title)
+                    .foregroundStyle(.white)
+            }
+        }
         .onAppear {
             loadStreak()
             loadLinkedHabits()
+            loadLinkedVisionItems()
             scheduleDailyChallengeNotification()
         }
         .sheet(isPresented: $showDueDatePicker) {
             dueDatePickerSheet
+        }
+        .sheet(isPresented: $showAddVisionSheet) {
+            AddVisionToJourneySheet(
+                goalID: displayGoal.id.uuidString,
+                onSave: {
+                    loadLinkedVisionItems()
+                },
+                onDismiss: {
+                    showAddVisionSheet = false
+                }
+            )
+        }
+        .sheet(isPresented: $showAddHabitSheet) {
+            AddMicrohabitView(
+                initialType: .create,
+                goals: [displayGoal],
+                initialGoalID: displayGoal.id.uuidString,
+                onDismiss: {
+                    showAddHabitSheet = false
+                },
+                onSave: {
+                    showAddHabitSheet = false
+                    loadLinkedHabits()
+                }
+            )
+            .environment(dataManager)
         }
         .overlay {
             if showStreakCelebration {
                 StreakCelebrationView(
                     streakCount: streakCelebrationCount,
                     userName: userName,
+                    completedTaskTitle: completedTaskTitle,
                     onDismiss: {
                         showStreakCelebration = false
                         showConfetti = false
@@ -111,80 +149,165 @@ struct DailyCheckInView: View {
         }
     }
 
-    // MARK: - Goal Overview Section (merged with progress)
+    // MARK: - Goal Overview Section (Flight Status — boarding pass style)
     private var goalOverviewSection: some View {
-        HStack(alignment: .top, spacing: 16) {
-            // Left side: Destination & Why
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Destination")
-                    .font(NoorFont.caption)
-                    .foregroundStyle(Color.noorTextSecondary)
-                
-                Text(displayGoal.destination.isEmpty ? displayGoal.title : displayGoal.destination)
-                    .font(NoorFont.title)
-                    .foregroundStyle(.white)
-                
-                if !displayGoal.timeline.isEmpty {
-                    HStack(spacing: 6) {
-                        Text("Arrival:")
-                            .font(NoorFont.caption)
-                            .foregroundStyle(Color.noorTextSecondary)
-                        Text(displayGoal.timeline)
-                            .font(NoorFont.callout)
-                            .foregroundStyle(Color.noorAccent)
-                            .fontWeight(.medium)
-                    }
+        VStack(spacing: 0) {
+            // Header — boarding pass style
+            HStack {
+                Image(systemName: "airplane")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color(white: 0.3))
+                Text("FLIGHT STATUS")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(white: 0.3))
+                    .tracking(2)
+                Spacer()
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(progress >= 100 ? Color.noorSuccess : Color.noorAccent)
+                        .frame(width: 6, height: 6)
+                    Text(progress >= 100 ? "ARRIVED" : "EN ROUTE")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(progress >= 100 ? Color.noorSuccess : Color.noorAccent)
                 }
-                
-                // Why this matters (user story)
-                if !displayGoal.userStory.isEmpty {
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color(white: 0.92))
+
+            // Main body — white like boarding pass
+            VStack(spacing: 16) {
+                // Departure time (journey start) & Arrival time (goal target)
+                HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Why this matters")
-                            .font(NoorFont.caption)
-                            .foregroundStyle(Color.noorTextSecondary)
-                        Text(displayGoal.userStory)
-                            .font(NoorFont.body)
-                            .foregroundStyle(Color.noorRoseGold)
-                            .italic()
-                            .lineLimit(3)
+                        Text("DEPARTURE")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Color(white: 0.5))
+                        Text(formatDate(displayGoal.createdAt))
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .foregroundStyle(.black)
+                        Text(displayGoal.departure.isEmpty ? "Current You" : displayGoal.departure)
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundStyle(Color(white: 0.45))
                     }
-                    .padding(.top, 4)
+
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("ARRIVAL")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Color(white: 0.5))
+                        Text(displayGoal.timeline.isEmpty ? "Your Goal" : displayGoal.timeline)
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .foregroundStyle(.black)
+                            .lineLimit(1)
+                        Text(displayGoal.destination.isEmpty ? displayGoal.title : displayGoal.destination)
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundStyle(Color(white: 0.45))
+                            .lineLimit(1)
+                    }
                 }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            
-            // Right side: Progress ring and challenges count
-            VStack(spacing: 8) {
-                ZStack {
-                    Circle()
-                        .stroke(Color.noorViolet.opacity(0.3), lineWidth: 6)
-                        .frame(width: 80, height: 80)
-                    
-                    Circle()
-                        .trim(from: 0, to: progress / 100)
-                        .stroke(Color.noorAccent, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                        .frame(width: 80, height: 80)
-                        .rotationEffect(.degrees(-90))
-                        .animation(.spring(response: 0.5), value: progress)
-                    
-                    VStack(spacing: 0) {
+
+                // Flight path progress line
+                GeometryReader { geo in
+                    let startX: CGFloat = 0
+                    let endX: CGFloat = geo.size.width
+                    let midY: CGFloat = geo.size.height / 2
+
+                    ZStack {
+                        Path { path in
+                            path.move(to: CGPoint(x: startX, y: midY))
+                            path.addLine(to: CGPoint(x: endX, y: midY))
+                        }
+                        .stroke(Color(white: 0.8), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+
+                        Path { path in
+                            path.move(to: CGPoint(x: startX, y: midY))
+                            path.addLine(to: CGPoint(x: endX * progress / 100, y: midY))
+                        }
+                        .stroke(
+                            progress >= 100 ? Color.noorSuccess : Color.noorAccent,
+                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                        )
+
+                        Circle()
+                            .fill(Color(white: 0.5))
+                            .frame(width: 6, height: 6)
+                            .position(x: startX + 3, y: midY)
+
+                        Circle()
+                            .fill(progress >= 100 ? Color.noorSuccess : Color.noorAccent.opacity(0.5))
+                            .frame(width: 6, height: 6)
+                            .position(x: endX - 3, y: midY)
+
+                        Image(systemName: "airplane")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(progress >= 100 ? Color.noorSuccess : Color.noorAccent)
+                            .position(
+                                x: max(10, endX * progress / 100),
+                                y: midY - 12
+                            )
+                            .animation(.spring(response: 0.6), value: progress)
+                    }
+                }
+                .frame(height: 32)
+
+                // Stats row
+                HStack(spacing: 0) {
+                    VStack(spacing: 4) {
+                        Text("CHALLENGES")
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Color(white: 0.5))
+                        Text("\(completedChallenges.count)/\(sortedTasks.count)")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundStyle(.black)
+                        Text("completed")
+                            .font(.system(size: 9, weight: .regular))
+                            .foregroundStyle(Color(white: 0.5))
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    Rectangle()
+                        .fill(Color(white: 0.85))
+                        .frame(width: 1, height: 50)
+
+                    VStack(spacing: 4) {
+                        Text("PROGRESS")
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Color(white: 0.5))
                         Text("\(Int(progress))%")
-                            .font(NoorFont.title2)
-                            .foregroundStyle(.white)
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundStyle(progress >= 100 ? Color.noorSuccess : Color.noorAccent)
+                        Text("complete")
+                            .font(.system(size: 9, weight: .regular))
+                            .foregroundStyle(Color(white: 0.5))
                     }
+                    .frame(maxWidth: .infinity)
+
+                    Rectangle()
+                        .fill(Color(white: 0.85))
+                        .frame(width: 1, height: 50)
+
+                    VStack(spacing: 4) {
+                        Text("REMAINING")
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Color(white: 0.5))
+                        Text("\(sortedTasks.count - completedChallenges.count)")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundStyle(.black)
+                        Text("to go")
+                            .font(.system(size: 9, weight: .regular))
+                            .foregroundStyle(Color(white: 0.5))
+                    }
+                    .frame(maxWidth: .infinity)
                 }
-                
-                Text("\(completedChallenges.count)/\(sortedTasks.count)")
-                    .font(NoorFont.callout)
-                    .foregroundStyle(Color.noorAccent)
-                
-                Text("complete")
-                    .font(NoorFont.caption)
-                    .foregroundStyle(Color.noorTextSecondary)
+                .padding(.vertical, 12)
+                .background(Color(white: 0.96))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
             }
+            .padding(16)
+            .background(Color.white)
         }
-        .padding(16)
-        .background(Color.white.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
@@ -212,70 +335,57 @@ struct DailyCheckInView: View {
                     }
                 }
 
-                // Challenge card — prominent and clear
-                VStack(spacing: 16) {
-                    HStack(alignment: .top, spacing: 16) {
-                        // Animated fill checkbox
+                // Challenge card — tap to see details
+                Button {
+                    showChallengeDetail = true
+                } label: {
+                    VStack(spacing: 12) {
+                        Text(challenge.title)
+                            .font(NoorFont.title2)
+                            .foregroundStyle(.white)
+                            .fontWeight(.semibold)
+                            .multilineTextAlignment(.center)
+
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 12))
+                            Text(challenge.estimatedTime)
+                                .font(NoorFont.callout)
+                        }
+                        .foregroundStyle(Color.noorSuccess)
+
+                        // Checkbox
                         Button {
                             completeChallengeWithAnimation(challenge)
                         } label: {
                             ZStack {
-                                // Outline (always visible)
                                 RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.noorSuccess, lineWidth: 3)
+                                    .stroke(Color.white, lineWidth: 3)
                                     .frame(width: 36, height: 36)
-                                
-                                // Fill (animates in)
+
                                 RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color.noorSuccess)
+                                    .fill(Color.white)
                                     .frame(width: 28 * checkmarkFillProgress, height: 28 * checkmarkFillProgress)
-                                
-                                // Checkmark (appears when complete)
+
                                 if checkmarkFillProgress >= 1 {
                                     Image(systemName: "checkmark")
                                         .font(.system(size: 18, weight: .bold))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(Color.noorBackground)
                                         .transition(.scale.combined(with: .opacity))
                                 }
                             }
                         }
                         .buttonStyle(.plain)
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(challenge.title)
-                                .font(NoorFont.title2)
-                                .foregroundStyle(Color.noorCharcoal)
-                                .fontWeight(.semibold)
-
-                            Text(challenge.taskDescription)
-                                .font(NoorFont.body)
-                                .foregroundStyle(Color.noorCharcoal.opacity(0.75))
-
-                            HStack(spacing: 12) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "clock")
-                                        .font(.system(size: 12))
-                                    Text(challenge.estimatedTime)
-                                        .font(NoorFont.callout)
-                                }
-                                .foregroundStyle(Color.noorSuccess)
-                            }
-                        }
-                        
-                        Spacer()
                     }
-                    
-                    // Tap to complete hint — centered
-                    Text("Tap the checkbox when you've completed this challenge")
-                        .font(NoorFont.caption)
-                        .foregroundStyle(Color.noorCharcoal.opacity(0.5))
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity)
+                    .padding(16)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
-                .padding(20)
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .shadow(color: Color.noorSuccess.opacity(0.2), radius: 12, x: 0, y: 6)
+                .buttonStyle(.plain)
+                .sheet(isPresented: $showChallengeDetail) {
+                    challengeDetailSheet(challenge)
+                }
             }
         } else if progress >= 100 {
             // All complete
@@ -300,109 +410,136 @@ struct DailyCheckInView: View {
         }
     }
 
-    // MARK: - Linked Habits Section
+    // MARK: - Vision & Habits (list + always-visible add options)
     @ViewBuilder
-    private var linkedHabitsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private var visionAndHabitsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .foregroundStyle(Color.noorSuccess)
-                Text("Linked Habits")
-                    .font(NoorFont.title2)
+                Text("Vision & Habits")
+                    .font(NoorFont.title)
                     .foregroundStyle(.white)
+                Spacer()
             }
-            
-            if linkedHabits.isEmpty {
-                VStack(spacing: 8) {
-                    Text("No habits linked yet")
-                        .font(NoorFont.body)
-                        .foregroundStyle(Color.noorTextSecondary)
-                    
-                    Text("Link habits to this journey to build consistent daily action")
-                        .font(NoorFont.caption)
-                        .foregroundStyle(Color.noorTextSecondary.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(16)
-                .background(Color.white.opacity(0.05))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else {
-                ForEach(linkedHabits, id: \.id) { habit in
+
+            // Linked vision items
+            ForEach(linkedVisionItems) { item in
+                Button {
+                    openVisionItem(item)
+                } label: {
                     HStack(spacing: 12) {
-                        Circle()
-                            .fill(Color.noorSuccess)
-                            .frame(width: 8, height: 8)
-                        
+                        Image(systemName: "eye.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.white)
+                            .frame(width: 28, height: 28)
+                            .background(Color.noorAccent.opacity(0.4))
+                            .clipShape(Circle())
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.title)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                            Text(item.kind.rawValue.capitalized)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.noorTextSecondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color.noorAccent)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Linked habit items
+            ForEach(linkedHabits) { habit in
+                Button {
+                    NotificationCenter.default.post(name: NSNotification.Name("switchToTab"), object: 3)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "leaf.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.white)
+                            .frame(width: 28, height: 28)
+                            .background(Color.noorSuccess.opacity(0.4))
+                            .clipShape(Circle())
+
                         VStack(alignment: .leading, spacing: 2) {
                             Text(habit.title)
-                                .font(NoorFont.body)
+                                .font(.system(size: 14, weight: .medium))
                                 .foregroundStyle(.white)
-                            
-                            if !habit.habitDescription.isEmpty {
-                                Text(habit.habitDescription)
-                                    .font(NoorFont.caption)
-                                    .foregroundStyle(Color.noorTextSecondary)
-                            }
+                                .lineLimit(1)
+                            Text("Daily habit")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.noorTextSecondary)
                         }
-                        
+
                         Spacer()
-                        
-                        if habit.focusDurationMinutes > 0 {
-                            Text("\(habit.focusDurationMinutes) min")
-                                .font(NoorFont.caption)
-                                .foregroundStyle(Color.noorSuccess)
-                        }
+
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color.noorSuccess)
                     }
-                    .padding(12)
-                    .background(Color.white.opacity(0.06))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(Color.white.opacity(0.08))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+                .buttonStyle(.plain)
             }
-        }
-    }
 
-    // MARK: - Linked Vision Section
-    @ViewBuilder
-    private var linkedVisionSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Action-oriented header
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Image(systemName: "bolt.fill")
-                        .foregroundStyle(Color.noorOrange)
-                    Text("Take Action Now")
-                        .font(NoorFont.title2)
-                        .foregroundStyle(.white)
-                }
-                
-                Text("Tap into your vision to fuel momentum")
-                    .font(NoorFont.caption)
-                    .foregroundStyle(Color.noorTextSecondary)
-            }
-            
-            VStack(spacing: 8) {
-                if !displayGoal.destination.isEmpty {
-                    HStack(spacing: 12) {
-                        Image(systemName: "star.fill")
-                            .foregroundStyle(Color.noorOrange)
-                            .font(.system(size: 14))
-                        
-                        Text("Becoming someone who \(displayGoal.destination.lowercased())")
-                            .font(NoorFont.body)
+            // Always show add buttons
+            HStack(spacing: 12) {
+                Button {
+                    showAddVisionSheet = true
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(Color.noorAccent.opacity(0.8))
+                        Text("Add Vision")
+                            .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(Color.noorTextSecondary)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .background(Color.noorOrange.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-                
-                Text("Add vision triggers in the Vision tab to stay inspired and ready to act")
-                    .font(NoorFont.caption)
-                    .foregroundStyle(Color.noorTextSecondary.opacity(0.6))
-                    .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    showAddHabitSheet = true
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(Color.noorSuccess.opacity(0.8))
+                        Text("Add Habit")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(Color.noorTextSecondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -581,6 +718,87 @@ struct DailyCheckInView: View {
         }
     }
 
+    // MARK: - Challenge Detail Sheet
+    private func challengeDetailSheet(_ challenge: DailyTask) -> some View {
+        NavigationStack {
+            ZStack {
+                Color.noorBackground.ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: 20) {
+                        Text(challenge.title)
+                            .font(NoorFont.title)
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+
+                        if let dueDate = challenge.dueDate {
+                            HStack(spacing: 6) {
+                                Image(systemName: "calendar")
+                                    .font(.system(size: 12))
+                                Text("Due \(formatShortDate(dueDate))")
+                                    .font(NoorFont.callout)
+                            }
+                            .foregroundStyle(dueDateColor(dueDate))
+                        }
+
+                        Text(challenge.taskDescription)
+                            .font(NoorFont.body)
+                            .foregroundStyle(Color.noorTextSecondary)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 14))
+                            Text(challenge.estimatedTime)
+                                .font(NoorFont.body)
+                        }
+                        .foregroundStyle(Color.noorSuccess)
+
+                        // Complete button
+                        if !challenge.isCompleted {
+                            Button {
+                                showChallengeDetail = false
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    completeChallengeWithAnimation(challenge)
+                                }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 16, weight: .bold))
+                                    Text("Mark Complete")
+                                        .font(NoorFont.button)
+                                }
+                                .foregroundStyle(Color.noorBackground)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Color.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 8)
+                        }
+                    }
+                    .padding(24)
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showChallengeDetail = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .presentationDetents([.medium])
+    }
+
     // MARK: - Due Date Picker Sheet
     private var dueDatePickerSheet: some View {
         NavigationStack {
@@ -653,7 +871,7 @@ struct DailyCheckInView: View {
         } else if due == today {
             return Color.noorOrange // Due today
         }
-        return Color.noorViolet // Future
+        return Color.noorAccent // Future
     }
 
     // MARK: - Actions
@@ -662,8 +880,15 @@ struct DailyCheckInView: View {
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
 
-        // Show confetti
+        // Show confetti with celebration haptics (heavy → medium → light)
         showConfetti = true
+        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
 
         // Mark task as complete
         let goalID = goal.id.uuidString
@@ -698,16 +923,19 @@ struct DailyCheckInView: View {
                     celebrationMessage = "Congratulations, \(userName)!"
                 }
 
-                // Show streak pop-up when user has a streak (matches reference design)
+                // Show streak pop-up when user has a streak
                 if currentStreak >= 1 {
                     streakCelebrationCount = currentStreak
+                    completedTaskTitle = task.title
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
                         withAnimation(.spring(response: 0.5)) {
                             showStreakCelebration = true
                         }
                     }
                 } else if newProgress >= 100 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
                         withAnimation(.spring(response: 0.5)) {
                             showCelebration = true
                         }
@@ -715,14 +943,15 @@ struct DailyCheckInView: View {
                 } else {
                     celebrationMessage = "Challenge complete!"
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
                         withAnimation(.spring(response: 0.5)) {
                             showCelebration = true
                         }
                     }
                 }
 
-                // Hide confetti after delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                // Hide confetti after delay (longer so the big burst is visible)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
                     showConfetti = false
                 }
 
@@ -821,6 +1050,33 @@ struct DailyCheckInView: View {
             }
         }
     }
+    
+    // MARK: - Load Linked Vision Items
+    private func openVisionItem(_ item: VisionItem) {
+        switch item.kind {
+        case .pinterest, .instagram, .action:
+            if let urlString = item.url, let url = URL(string: urlString) {
+                UIApplication.shared.open(url)
+            }
+        case .destination:
+            let name = item.placeName ?? item.title
+            let query = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+            if let url = URL(string: "https://www.google.com/search?q=flights+to+\(query)") {
+                UIApplication.shared.open(url)
+            }
+        }
+    }
+
+    private func loadLinkedVisionItems() {
+        // Load vision items from UserDefaults that are linked to this goal
+        let goalID = goal.id.uuidString
+        if let data = UserDefaults.standard.data(forKey: StorageKey.visionItems),
+           let items = try? JSONDecoder().decode([VisionItem].self, from: data) {
+            linkedVisionItems = items.filter { $0.goalID == goalID }
+        } else {
+            linkedVisionItems = []
+        }
+    }
 
     // MARK: - Schedule Daily Challenge Notification
     private func scheduleDailyChallengeNotification() {
@@ -874,6 +1130,450 @@ struct DailyCheckInView: View {
             // Reset for next challenge
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 checkmarkFillProgress = 0
+            }
+        }
+    }
+}
+
+// MARK: - Add Vision to Journey Sheet
+struct AddVisionToJourneySheet: View {
+    let goalID: String
+    let onSave: () -> Void
+    let onDismiss: () -> Void
+    
+    @State private var selectedKind: VisionItemKind = .pinterest
+    @State private var title = ""
+    @State private var url = ""
+    @State private var placeName = ""
+    @State private var isSaving = false
+    
+    private var canSave: Bool {
+        switch selectedKind {
+        case .pinterest, .instagram:
+            return !title.isEmpty && !url.isEmpty
+        case .destination:
+            return !placeName.isEmpty
+        case .action:
+            return !title.isEmpty
+        }
+    }
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.noorBackground.ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        // Header
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Add to Your Vision")
+                                .font(NoorFont.title)
+                                .foregroundStyle(.white)
+                            Text("Save inspiration that fuels this journey")
+                                .font(NoorFont.body)
+                                .foregroundStyle(Color.noorTextSecondary)
+                        }
+                        .padding(.top, 8)
+                        
+                        // Type selection
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("What are you saving?")
+                                .font(NoorFont.title2)
+                                .foregroundStyle(.white)
+                            
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                                ForEach(VisionItemKind.allCases, id: \.self) { kind in
+                                    Button {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            selectedKind = kind
+                                        }
+                                    } label: {
+                                        VStack(spacing: 8) {
+                                            Image(systemName: kind.icon)
+                                                .font(.system(size: 24))
+                                            Text(kind.displayName)
+                                                .font(NoorFont.caption)
+                                                .multilineTextAlignment(.center)
+                                        }
+                                        .foregroundStyle(selectedKind == kind ? .white : Color.noorTextSecondary)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 16)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(selectedKind == kind ? Color.noorOrange.opacity(0.3) : Color.white.opacity(0.06))
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(selectedKind == kind ? Color.noorOrange : Color.clear, lineWidth: 2)
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        
+                        // Input fields based on type
+                        VStack(alignment: .leading, spacing: 16) {
+                            switch selectedKind {
+                            case .pinterest, .instagram:
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Title")
+                                        .font(NoorFont.callout)
+                                        .foregroundStyle(Color.noorTextSecondary)
+                                    TextField("Name this inspiration", text: $title)
+                                        .font(NoorFont.body)
+                                        .foregroundStyle(.white)
+                                        .padding(14)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .tint(Color.noorOrange)
+                                }
+
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Link")
+                                        .font(NoorFont.callout)
+                                        .foregroundStyle(Color.noorTextSecondary)
+                                    TextField("Paste URL here", text: $url)
+                                        .font(NoorFont.body)
+                                        .foregroundStyle(.white)
+                                        .keyboardType(.URL)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+                                        .padding(14)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .tint(Color.noorOrange)
+                                }
+
+                            case .destination:
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Place Name")
+                                        .font(NoorFont.callout)
+                                        .foregroundStyle(Color.noorTextSecondary)
+                                    TextField("Where do you want to go?", text: $placeName)
+                                        .font(NoorFont.body)
+                                        .foregroundStyle(.white)
+                                        .padding(14)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .tint(Color.noorOrange)
+                                }
+
+                            case .action:
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Action Step")
+                                        .font(NoorFont.callout)
+                                        .foregroundStyle(Color.noorTextSecondary)
+                                    TextField("What action will you take?", text: $title)
+                                        .font(NoorFont.body)
+                                        .foregroundStyle(.white)
+                                        .padding(14)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .tint(Color.noorOrange)
+                                }
+
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Link (optional)")
+                                        .font(NoorFont.callout)
+                                        .foregroundStyle(Color.noorTextSecondary)
+                                    TextField("Add a link if relevant", text: $url)
+                                        .font(NoorFont.body)
+                                        .foregroundStyle(.white)
+                                        .keyboardType(.URL)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+                                        .padding(14)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .tint(Color.noorOrange)
+                                }
+                            }
+                        }
+                        
+                        Spacer(minLength: 40)
+                    }
+                    .padding(.horizontal, NoorLayout.horizontalPadding)
+                }
+                .scrollDismissesKeyboard(.interactively)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        onDismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                }
+                
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        saveVisionItem()
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Text("Save")
+                                .font(NoorFont.button)
+                                .foregroundStyle(canSave ? Color.noorOrange : Color.noorTextSecondary)
+                        }
+                    }
+                    .disabled(!canSave || isSaving)
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+    }
+    
+    private func saveVisionItem() {
+        guard canSave, !isSaving else { return }
+        isSaving = true
+        
+        let haptic = UIImpactFeedbackGenerator(style: .medium)
+        haptic.impactOccurred()
+        
+        let item: VisionItem
+        switch selectedKind {
+        case .pinterest, .instagram:
+            item = VisionItem(kind: selectedKind, title: title, url: url, goalID: goalID)
+        case .destination:
+            item = VisionItem(kind: .destination, title: placeName, placeName: placeName, goalID: goalID)
+        case .action:
+            item = VisionItem(kind: .action, title: title, url: url.isEmpty ? nil : url, goalID: goalID)
+        }
+        
+        // Load existing items
+        var items: [VisionItem] = []
+        if let data = UserDefaults.standard.data(forKey: StorageKey.visionItems),
+           let decoded = try? JSONDecoder().decode([VisionItem].self, from: data) {
+            items = decoded
+        }
+        
+        // Add new item
+        items.append(item)
+        
+        // Save back
+        if let encoded = try? JSONEncoder().encode(items) {
+            UserDefaults.standard.set(encoded, forKey: StorageKey.visionItems)
+        }
+        
+        isSaving = false
+        onSave()
+        onDismiss()
+    }
+}
+
+// MARK: - Add Habit to Journey Sheet
+struct AddHabitToJourneySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(DataManager.self) private var dataManager
+    
+    let goalID: String
+    let goalName: String
+    let onSave: () -> Void
+    let onDismiss: () -> Void
+    
+    @State private var habitTitle = ""
+    @State private var selectedDays: Set<Int> = []
+    @State private var focusDuration: Int = 5
+    @State private var reminderTime: Date = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
+    @State private var visionStatement = ""
+    @State private var isSaving = false
+    
+    private let dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    
+    private var canSave: Bool {
+        !habitTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !selectedDays.isEmpty
+    }
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.noorBackground.ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        // Header
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Add a Habit")
+                                .font(NoorFont.title)
+                                .foregroundStyle(.white)
+                            HStack(spacing: 6) {
+                                Image(systemName: "airplane")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color.noorAccent)
+                                Text("Linked to: \(goalName)")
+                                    .font(NoorFont.callout)
+                                    .foregroundStyle(Color.noorAccent)
+                            }
+                        }
+                        .padding(.top, 8)
+                        
+                        // Habit name
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("What habit will support this journey?")
+                                .font(NoorFont.title2)
+                                .foregroundStyle(.white)
+                            TextField("e.g., Practice language, Exercise, Read", text: $habitTitle)
+                                .font(NoorFont.body)
+                                .foregroundStyle(.white)
+                                .padding(14)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .tint(Color.noorAccent)
+                        }
+                        
+                        // Days selection
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Which days?")
+                                .font(NoorFont.title2)
+                                .foregroundStyle(.white)
+                            
+                            HStack(spacing: 8) {
+                                ForEach(0..<7, id: \.self) { day in
+                                    Button {
+                                        if selectedDays.contains(day) {
+                                            selectedDays.remove(day)
+                                        } else {
+                                            selectedDays.insert(day)
+                                        }
+                                    } label: {
+                                        Text(dayNames[day])
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(selectedDays.contains(day) ? Color.noorBackground : Color.noorTextSecondary)
+                                            .frame(width: 40, height: 40)
+                                            .background(
+                                                Circle()
+                                                    .fill(selectedDays.contains(day) ? Color.noorSuccess : Color.white.opacity(0.08))
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        
+                        // Focus duration
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Focus time")
+                                .font(NoorFont.title2)
+                                .foregroundStyle(.white)
+                            Text("How many minutes will you dedicate?")
+                                .font(NoorFont.caption)
+                                .foregroundStyle(Color.noorTextSecondary)
+                            
+                            HStack(spacing: 16) {
+                                ForEach([5, 10, 15, 30], id: \.self) { mins in
+                                    Button {
+                                        focusDuration = mins
+                                    } label: {
+                                        Text("\(mins)m")
+                                            .font(NoorFont.callout)
+                                            .fontWeight(.semibold)
+                                            .foregroundStyle(focusDuration == mins ? Color.noorBackground : Color.noorTextSecondary)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 10)
+                                            .background(
+                                                Capsule()
+                                                    .fill(focusDuration == mins ? Color.noorSuccess : Color.white.opacity(0.08))
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        
+                        // Vision statement (optional)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Why does this habit matter?")
+                                .font(NoorFont.title2)
+                                .foregroundStyle(.white)
+                            Text("Connect this habit to your bigger vision (optional)")
+                                .font(NoorFont.caption)
+                                .foregroundStyle(Color.noorTextSecondary)
+                            TextField("e.g., Because I want to become fluent", text: $visionStatement)
+                                .font(NoorFont.body)
+                                .foregroundStyle(.white)
+                                .padding(14)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .tint(Color.noorAccent)
+                        }
+                        
+                        Spacer(minLength: 40)
+                    }
+                    .padding(.horizontal, NoorLayout.horizontalPadding)
+                }
+                .scrollDismissesKeyboard(.interactively)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        onDismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                }
+                
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        saveHabit()
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Text("Add")
+                                .font(NoorFont.button)
+                                .foregroundStyle(canSave ? Color.noorSuccess : Color.noorTextSecondary)
+                        }
+                    }
+                    .disabled(!canSave || isSaving)
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+    }
+    
+    private func saveHabit() {
+        guard canSave, !isSaving else { return }
+        isSaving = true
+        
+        let haptic = UIImpactFeedbackGenerator(style: .medium)
+        haptic.impactOccurred()
+        
+        let trimmedTitle = habitTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Create the habit
+        let habit = Microhabit(
+            title: trimmedTitle,
+            habitDescription: visionStatement.trimmingCharacters(in: .whitespacesAndNewlines),
+            goalID: goalID,
+            focusDurationMinutes: focusDuration,
+            isArchived: false
+        )
+
+        // Save using DataManager
+        Task {
+            do {
+                try await dataManager.saveMicrohabit(habit)
+                await MainActor.run {
+                    isSaving = false
+                    onSave()
+                    onDismiss()
+                }
+            } catch {
+                print("Failed to save habit: \(error)")
+                await MainActor.run {
+                    isSaving = false
+                }
             }
         }
     }

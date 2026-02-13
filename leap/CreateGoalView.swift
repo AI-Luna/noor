@@ -17,6 +17,7 @@ struct CreateGoalView: View {
 
     @State private var step: Int = 1
     @State private var selectedCategory: GoalCategory?
+    @State private var departure: String = ""
     @State private var destination: String = ""
     @State private var timeline: String = ""
     @State private var userStory: String = ""
@@ -173,6 +174,20 @@ struct CreateGoalView: View {
                     .foregroundStyle(Color.noorTextSecondary)
 
                 TextField("June 2026", text: $timeline)
+                    .textFieldStyle(.plain)
+                    .font(NoorFont.body)
+                    .foregroundStyle(.white)
+                    .padding(16)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Where are you departing from?")
+                    .font(NoorFont.callout)
+                    .foregroundStyle(Color.noorTextSecondary)
+
+                TextField("e.g. Overthinking, 9-to-5, Square one", text: $departure)
                     .textFieldStyle(.plain)
                     .font(NoorFont.body)
                     .foregroundStyle(.white)
@@ -345,7 +360,7 @@ struct CreateGoalView: View {
         Group {
             switch step {
             case 1:
-                actionButton(title: "Next", isDisabled: selectedCategory == nil) {
+                actionButton(title: "Continue", isDisabled: selectedCategory == nil) {
                     tryAdvanceFromStep1()
                 }
             case 2:
@@ -460,6 +475,7 @@ struct CreateGoalView: View {
                     title: destination,
                     goalDescription: userStory,
                     category: category.rawValue,
+                    departure: departure,
                     destination: destination,
                     timeline: timeline,
                     userStory: userStory,

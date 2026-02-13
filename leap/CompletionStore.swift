@@ -70,4 +70,15 @@ final class CompletionStore {
             }
         }
     }
+    
+    /// Returns the number of times a habit has been completed (stored per habit)
+    func completionCount(for habitId: String) -> Int {
+        defaults.integer(forKey: "habit_completion_count_\(habitId)")
+    }
+    
+    /// Increment the completion count for a habit
+    func incrementCompletionCount(for habitId: String) {
+        let current = completionCount(for: habitId)
+        defaults.set(current + 1, forKey: "habit_completion_count_\(habitId)")
+    }
 }

@@ -25,7 +25,8 @@ final class DataManager {
             Goal.self,
             DailyTask.self,
             Streak.self,
-            Microhabit.self
+            Microhabit.self,
+            TravelPin.self
         ])
         let config = ModelConfiguration(
             isStoredInMemoryOnly: false,
@@ -281,6 +282,35 @@ final class DataManager {
         if !habit.completedDates.contains(where: { Calendar.current.isDate($0, inSameDayAs: dayStart) }) {
             habit.completedDates.append(date)
         }
+        try ctx.save()
+    }
+
+    // MARK: - Travel Pins
+
+    func saveTravelPin(_ pin: TravelPin) async throws {
+        let ctx = try requireContext()
+        ctx.insert(pin)
+        try ctx.save()
+    }
+
+    func fetchTravelPins() async throws -> [TravelPin] {
+        let ctx = try requireContext()
+        let descriptor = FetchDescriptor<TravelPin>(
+            sortBy: [SortDescriptor(\.dateVisited, order: .reverse)]
+        )
+        return try ctx.fetch(descriptor)
+    }
+
+    func deleteTravelPin(_ id: UUID) async throws {
+        let ctx = try requireContext()
+        let descriptor = FetchDescriptor<TravelPin>(
+            predicate: #Predicate<TravelPin> { $0.id == id }
+        )
+        let pins = try ctx.fetch(descriptor)
+        guard let pin = pins.first else {
+            throw DataManagerError.notFound("TravelPin", id: id.uuidString)
+        }
+        ctx.delete(pin)
         try ctx.save()
     }
 
