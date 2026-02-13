@@ -58,6 +58,7 @@ struct OnboardingView: View {
     @State private var visibleChallengeCount: Int = 0
     @State private var showItineraryHeader: Bool = false
     @State private var showItineraryChallenges: Bool = false
+    @State private var paywallCheckComplete: Bool = false
     
     // Splash animation states
     @State private var starOffset: CGSize = CGSize(width: -200, height: -300)
@@ -1032,33 +1033,97 @@ struct OnboardingView: View {
     private var monthlyPackage: RevenueCat.Package? {
         purchaseManager.currentOffering?.availablePackages.first { $0.packageType == .monthly }
     }
-
+    
     private var paywallScreen: some View {
         ZStack(alignment: .bottom) {
-            // Use RevenueCat's remote paywall configured in dashboard
-            RevenueCatUI.PaywallView(displayCloseButton: false)
-                .onPurchaseCompleted { customerInfo in
-                    print("Purchase completed: \(customerInfo.entitlements)")
-                    if customerInfo.entitlements["pro"]?.isActive == true {
-                        saveUserAndComplete()
+            if !paywallCheckComplete {
+                // Show loading while checking subscription status
+                Color.noorBackground
+                    .ignoresSafeArea()
+                    .overlay {
+                        VStack(spacing: 16) {
+                            ProgressView()
+                                .tint(.white)
+                            Text("Checking subscription...")
+                                .font(NoorFont.callout)
+                                .foregroundStyle(Color.noorTextSecondary)
+                        }
                     }
-                }
-                .onRestoreCompleted { customerInfo in
-                    print("Restore completed: \(customerInfo.entitlements)")
-                    if customerInfo.entitlements["pro"]?.isActive == true {
-                        saveUserAndComplete()
+            } else {
+                // Use RevenueCat's remote paywall configured in dashboard
+                RevenueCatUI.PaywallView(displayCloseButton: false)
+                    .onPurchaseCompleted { customerInfo in
+                        handlePaywallCompletion(customerInfo: customerInfo, source: "Purchase")
                     }
+                    .onRestoreCompleted { customerInfo in
+                        handlePaywallCompletion(customerInfo: customerInfo, source: "Restore")
+                    }
+                
+                // Testing: skip paywall — faint arrow below restore area
+                Button {
+                    saveUserAndComplete()
+                } label: {
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.25))
                 }
-            
-            // Testing: skip paywall — faint arrow below restore area
-            Button {
-                saveUserAndComplete()
-            } label: {
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.25))
+                .padding(.bottom, 24)
             }
-            .padding(.bottom, 24)
+        }
+        .task {
+            await checkSubscriptionOnPaywallAppear()
+        }
+    }
+    
+    /// Check subscription status when paywall appears - skip if already Pro
+    private func checkSubscriptionOnPaywallAppear() async {
+        NSLog("[OnboardingPaywall] Checking subscription status...")
+        await PurchaseManager.shared.checkProStatus()
+        
+        if PurchaseManager.shared._isPro {
+            NSLog("[OnboardingPaywall] User already subscribed - skipping paywall")
+            await MainActor.run {
+                saveUserAndComplete()
+            }
+        } else {
+            NSLog("[OnboardingPaywall] No active subscription - showing paywall")
+            await MainActor.run {
+                paywallCheckComplete = true
+            }
+        }
+    }
+    
+    /// Handle purchase or restore completion on paywall
+    private func handlePaywallCompletion(customerInfo: CustomerInfo, source: String) {
+        NSLog("[OnboardingPaywall] \(source) completed")
+        NSLog("[OnboardingPaywall] Active entitlements: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")
+        
+        let proActive = customerInfo.entitlements["pro"]?.isActive == true
+        
+        if proActive {
+            // Refresh global state and complete
+            Task { await PurchaseManager.shared.checkProStatus() }
+            saveUserAndComplete()
+        } else {
+            NSLog("[OnboardingPaywall] \(source) completed but pro not active - verifying...")
+            // Callback info might be stale, refetch and check
+            Task {
+                await PurchaseManager.shared.checkProStatus()
+                if PurchaseManager.shared._isPro {
+                    await MainActor.run {
+                        saveUserAndComplete()
+                    }
+                } else {
+                    // Still not pro - try restore as last resort
+                    NSLog("[OnboardingPaywall] Attempting restore as fallback...")
+                    let restored = await PurchaseManager.shared.restoreAndCheck()
+                    if restored {
+                        await MainActor.run {
+                            saveUserAndComplete()
+                        }
+                    }
+                }
+            }
         }
     }
     
