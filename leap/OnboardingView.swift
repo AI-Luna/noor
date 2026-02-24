@@ -514,6 +514,21 @@ struct OnboardingView: View {
                     Text("Noor uses AI to create your action plan. Your goal and story are sent to Anthropic (Claude AI) to generate your personalized itinerary. No personal identifiers are shared.")
                         .font(NoorFont.title2)
                         .foregroundStyle(Color.noorTextSecondary)
+
+                    Button {
+                        if let url = URL(string: "https://noor-website-virid.vercel.app/privacy/") {
+                            UIApplication.shared.open(url)
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("Learn more in our Privacy Policy")
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .font(NoorFont.onboardingCaption)
+                        .foregroundStyle(Color.noorViolet.opacity(0.8))
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 // Checkbox — sits right below the body text, centered
