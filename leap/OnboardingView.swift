@@ -55,6 +55,7 @@ struct OnboardingView: View {
     @State private var boardingPass: String = ""
     @State private var isGenerating: Bool = false
     @State private var showPaywall: Bool = false
+    @State private var aiConsentChecked: Bool = false
     @State private var visibleChallengeCount: Int = 0
     @State private var showItineraryHeader: Bool = false
     @State private var showItineraryChallenges: Bool = false
@@ -171,20 +172,21 @@ struct OnboardingView: View {
                 case 2: swipeableIntroScreen
                 case 3: destinationSelectionScreen
                 case 4: scienceAfterDestinationScreen
-                case 5: OnboardingDestinationInputView(destination: $destination, selectedCategory: selectedCategory, onNext: { hapticLight(); advanceScreen() })
-                case 6: OnboardingTimelineInputView(timeline: $timeline, onNext: { hapticLight(); advanceScreen() })
-                case 7: OnboardingStoryInputView(userStory: $userStory, destination: destination, selectedCategory: selectedCategory, onNext: { hapticMedium(); advanceScreen() })
-                case 8: OnboardingDepartureInputView(departure: $departure, onNext: { hapticLight(); advanceScreen() })
-                case 9: OnboardingNameInputView(userName: $userName, onNext: {
+                case 5: aiConsentScreen
+                case 6: OnboardingDestinationInputView(destination: $destination, selectedCategory: selectedCategory, onNext: { hapticLight(); advanceScreen() })
+                case 7: OnboardingTimelineInputView(timeline: $timeline, onNext: { hapticLight(); advanceScreen() })
+                case 8: OnboardingStoryInputView(userStory: $userStory, destination: destination, selectedCategory: selectedCategory, onNext: { hapticMedium(); advanceScreen() })
+                case 9: OnboardingDepartureInputView(departure: $departure, onNext: { hapticLight(); advanceScreen() })
+                case 10: OnboardingNameInputView(userName: $userName, onNext: {
                     hapticLight()
                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                         advanceScreen()
                     }
                 })
-                case 10: planningTripScreen
-                case 11: itineraryRevealScreen
-                case 12: paywallScreen
+                case 11: planningTripScreen
+                case 12: itineraryRevealScreen
+                case 13: paywallScreen
                 default: splashScreen
                 }
             }
@@ -490,7 +492,79 @@ struct OnboardingView: View {
         .padding(.horizontal, NoorLayout.horizontalPadding)
     }
 
-    // MARK: - Screen 10: Planning Your Trip (progress ring with incremental steps)
+    // MARK: - Screen 5: AI Consent
+    private var aiConsentScreen: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 24) {
+                    Image(systemName: "sparkle")
+                        .font(.system(size: 48))
+                        .foregroundStyle(Color.noorViolet)
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Powered by AI.")
+                            .font(NoorFont.largeTitle)
+                            .foregroundStyle(Color.noorTextPrimary)
+
+                        Rectangle()
+                            .fill(Color.noorViolet.opacity(0.5))
+                            .frame(width: 60, height: 2)
+
+                        Text("Noor uses AI to create your action plan. Your goal and story are sent to Anthropic (Claude AI) to generate your personalized itinerary. No personal identifiers are shared.")
+                            .font(NoorFont.title2)
+                            .foregroundStyle(Color.noorTextSecondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer(minLength: 0)
+            }
+            .frame(maxHeight: .infinity)
+
+            VStack(spacing: 20) {
+                Button {
+                    hapticLight()
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        aiConsentChecked.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.white.opacity(0.3), lineWidth: 1.5)
+                                .frame(width: 22, height: 22)
+                                .opacity(aiConsentChecked ? 0 : 1)
+                            if aiConsentChecked {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.noorViolet)
+                                    .frame(width: 22, height: 22)
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                        Text("I understand and agree")
+                            .font(NoorFont.onboardingBody)
+                            .foregroundStyle(Color.noorTextSecondary)
+                        Spacer()
+                    }
+                }
+                .buttonStyle(.plain)
+
+                OnboardingTextButton(
+                    title: "Continue",
+                    isDisabled: !aiConsentChecked
+                ) {
+                    hapticLight()
+                    advanceScreen()
+                }
+            }
+            .padding(.bottom, 20)
+        }
+        .padding(.horizontal, NoorLayout.horizontalPadding)
+    }
+
+    // MARK: - Screen 11: Planning Your Trip (progress ring with incremental steps)
     @State private var planningProgress: CGFloat = 0
     @State private var planningStepIndex: Int = 0
     @State private var planningTextOpacity: Double = 0
@@ -947,7 +1021,7 @@ struct OnboardingView: View {
                     userStory = ""
                     generatedChallenges = []
                     visibleChallengeCount = 0
-                    currentScreen = 5
+                    currentScreen = 6
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "arrow.triangle.2.circlepath")
