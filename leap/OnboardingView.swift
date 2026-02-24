@@ -495,40 +495,35 @@ struct OnboardingView: View {
     // MARK: - Screen 5: AI Consent
     private var aiConsentScreen: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 0) {
-                Spacer(minLength: 0)
-                VStack(alignment: .leading, spacing: 24) {
-                    Image(systemName: "sparkle")
-                        .font(.system(size: 48))
-                        .foregroundStyle(Color.noorViolet)
+            Spacer(minLength: 0)
 
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Powered by AI.")
-                            .font(NoorFont.largeTitle)
-                            .foregroundStyle(Color.noorTextPrimary)
+            VStack(alignment: .leading, spacing: 24) {
+                Image(systemName: "sparkle")
+                    .font(.system(size: 48))
+                    .foregroundStyle(Color.noorViolet)
 
-                        Rectangle()
-                            .fill(Color.noorViolet.opacity(0.5))
-                            .frame(width: 60, height: 2)
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Powered by AI.")
+                        .font(NoorFont.largeTitle)
+                        .foregroundStyle(Color.noorTextPrimary)
 
-                        Text("Noor uses AI to create your action plan. Your goal and story are sent to Anthropic (Claude AI) to generate your personalized itinerary. No personal identifiers are shared.")
-                            .font(NoorFont.title2)
-                            .foregroundStyle(Color.noorTextSecondary)
-                    }
+                    Rectangle()
+                        .fill(Color.noorViolet.opacity(0.5))
+                        .frame(width: 60, height: 2)
+
+                    Text("Noor uses AI to create your action plan. Your goal and story are sent to Anthropic (Claude AI) to generate your personalized itinerary. No personal identifiers are shared.")
+                        .font(NoorFont.title2)
+                        .foregroundStyle(Color.noorTextSecondary)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Spacer(minLength: 0)
-            }
-            .frame(maxHeight: .infinity)
 
-            VStack(spacing: 20) {
+                // Checkbox — sits right below the body text, centered
                 Button {
                     hapticLight()
                     withAnimation(.easeInOut(duration: 0.2)) {
                         aiConsentChecked.toggle()
                     }
                 } label: {
-                    HStack(spacing: 12) {
+                    HStack(spacing: 10) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 6)
                                 .stroke(Color.white.opacity(0.3), lineWidth: 1.5)
@@ -546,18 +541,21 @@ struct OnboardingView: View {
                         Text("I understand and agree")
                             .font(NoorFont.onboardingBody)
                             .foregroundStyle(Color.noorTextSecondary)
-                        Spacer()
                     }
+                    .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .buttonStyle(.plain)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-                OnboardingTextButton(
-                    title: "Continue",
-                    isDisabled: !aiConsentChecked
-                ) {
-                    hapticLight()
-                    advanceScreen()
-                }
+            Spacer(minLength: 0)
+
+            OnboardingTextButton(
+                title: "Continue",
+                isDisabled: !aiConsentChecked
+            ) {
+                hapticLight()
+                advanceScreen()
             }
             .padding(.bottom, 20)
         }
